@@ -28,17 +28,7 @@ export default function Navbar() {
                     : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                 }`}
               >
-                Sinh viên
-              </Link>
-              <Link 
-                to="/admin" 
-                className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
-                  isActive('/admin') 
-                    ? 'bg-blue-100 text-blue-700' 
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                }`}
-              >
-                Quản trị
+                Trang chủ
               </Link>
               <Link 
                 to="/history" 
@@ -48,7 +38,7 @@ export default function Navbar() {
                     : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                 }`}
               >
-                Lịch sử
+                Lịch sử giao dịch
               </Link>
             </div>
           </div>

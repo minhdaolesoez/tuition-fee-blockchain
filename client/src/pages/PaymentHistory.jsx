@@ -125,8 +125,15 @@ export default function PaymentHistory() {
                       {payment.semester}
                     </td>
                     <td>
-                      <span className="font-semibold text-gray-900">{ethers.formatEther(payment.amount)}</span>
-                      <span className="text-gray-500 ml-1">ETH</span>
+                      <div>
+                        <span className="font-semibold text-gray-900">{ethers.formatEther(payment.amountAfterRefund || payment.amount)}</span>
+                        <span className="text-gray-500 ml-1">ETH</span>
+                      </div>
+                      {payment.amount !== payment.amountAfterRefund && payment.amountAfterRefund && (
+                        <div className="text-xs text-gray-400">
+                          Gốc: {ethers.formatEther(payment.amount)} ETH
+                        </div>
+                      )}
                     </td>
                     <td className="text-gray-500 text-sm">
                       {formatDate(payment.timestamp)}

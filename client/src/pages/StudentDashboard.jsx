@@ -1,50 +1,99 @@
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { useWeb3 } from '../contexts/Web3Context';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 export default function StudentDashboard() {
   const { account, contract, isCorrectNetwork } = useWeb3();
+  const navigate = useNavigate();
   const [studentInfo, setStudentInfo] = useState(null);
-  const [selectedSemester, setSelectedSemester] = useState('2024-1');
+  const [semesters, setSemesters] = useState([]);
+  const [selectedSemester, setSelectedSemester] = useState('');
   const [feeAmount, setFeeAmount] = useState(null);
   const [hasPaid, setHasPaid] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isPaying, setIsPaying] = useState(false);
 
-  // Fetch student info
+  // Fetch semesters first
+  useEffect(() => {
+    async function fetchSemesters() {
+      if (!contract) return;
+      try {
+        const activeSemesters = await contract.getActiveSemesters();
+        setSemesters(activeSemesters);
+        if (activeSemesters.length > 0 && !selectedSemester) {
+          setSelectedSemester(activeSemesters[0]);
+        }
+      } catch (err) {
+        console.error('Error fetching semesters:', err);
+      }
+    }
+    fetchSemesters();
+  }, [contract]);
+
+  // Fetch student info and check registration
   useEffect(() => {
     async function fetchStudentInfo() {
-      if (!contract || !account) return;
+      if (!contract || !account) {
+        setIsLoading(false);
+        return;
+      }
       
       setIsLoading(true);
       try {
+        // Check if admin first
+        const owner = await contract.owner();
+        if (owner.toLowerCase() === account.toLowerCase()) {
+          // Admin should go to admin page
+          navigate('/admin');
+          return;
+        }
+        
         const student = await contract.getStudent(account);
         if (student.isRegistered) {
           setStudentInfo({
             studentId: student.studentId,
             scholarshipPercent: Number(student.scholarshipPercent),
           });
-          
-          // Get fee for selected semester
-          const fee = await contract.calculateFee(account, selectedSemester);
-          setFeeAmount(fee);
-          
-          // Check if already paid
-          const paid = await contract.hasStudentPaid(account, selectedSemester);
-          setHasPaid(paid);
         } else {
-          setStudentInfo(null);
+          // Not registered, redirect to home for registration
+          navigate('/');
+          return;
         }
       } catch (err) {
         console.error('Error fetching student info:', err);
+        setStudentInfo(null);
       } finally {
         setIsLoading(false);
       }
     }
     
     fetchStudentInfo();
-  }, [contract, account, selectedSemester]);
+  }, [contract, account, navigate]);
+
+  // Fetch fee info when semester changes
+  useEffect(() => {
+    async function fetchFeeInfo() {
+      if (!contract || !account || !selectedSemester || !studentInfo) return;
+      
+      try {
+        // Get fee for selected semester
+        const fee = await contract.calculateFee(account, selectedSemester);
+        setFeeAmount(fee);
+        
+        // Check if already paid
+        const paid = await contract.hasStudentPaid(account, selectedSemester);
+        setHasPaid(paid);
+      } catch (err) {
+        console.error('Error fetching fee info:', err);
+        setFeeAmount(null);
+        setHasPaid(false);
+      }
+    }
+    
+    fetchFeeInfo();
+  }, [contract, account, selectedSemester, studentInfo]);
 
   // Pay tuition
   const handlePayTuition = async () => {
@@ -55,7 +104,23 @@ export default function StudentDashboard() {
       const tx = await contract.payTuition(selectedSemester, { value: feeAmount });
       toast.loading('Đang xử lý giao dịch...', { id: 'payment' });
       
-      await tx.wait();
+      const receipt = await tx.wait();
+      
+      // Save payment to data server for persistence
+      try {
+        await fetch('http://localhost:3001/api/payments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            wallet: account,
+            semester: selectedSemester,
+            amount: feeAmount.toString(),
+            timestamp: Math.floor(Date.now() / 1000)
+          })
+        });
+      } catch (apiErr) {
+        console.warn('Could not save payment to server:', apiErr);
+      }
       
       toast.success('Thanh toán thành công!', { id: 'payment' });
       setHasPaid(true);
@@ -111,7 +176,7 @@ export default function StudentDashboard() {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="text-center">
-          <div className="spinner mx-auto mb-4"></div>
+          <div className="w-16 h-16 mx-auto mb-4 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
           <p className="text-gray-500 font-medium">Đang tải...</p>
         </div>
       </div>
@@ -119,25 +184,8 @@ export default function StudentDashboard() {
   }
 
   if (!studentInfo) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="text-center animate-slide-up">
-          <div className="w-24 h-24 mx-auto mb-6 bg-gradient-to-br from-red-100 to-rose-100 rounded-full flex items-center justify-center">
-            <svg className="w-12 h-12 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </div>
-          <h2 className="text-2xl font-bold text-red-600 mb-3">
-            Chưa đăng ký
-          </h2>
-          <p className="text-gray-500 max-w-sm mx-auto">
-            Địa chỉ ví chưa được đăng ký trong hệ thống.
-            <br />
-            Vui lòng liên hệ phòng đào tạo.
-          </p>
-        </div>
-      </div>
-    );
+    // This should not happen as we redirect in useEffect, but just in case
+    return null;
   }
 
   return (
@@ -184,14 +232,19 @@ export default function StudentDashboard() {
         <div className="card-body">
           <div className="mb-6">
             <label className="block text-sm font-medium text-gray-700 mb-2">Học kỳ</label>
-            <select
-              value={selectedSemester}
-              onChange={(e) => setSelectedSemester(e.target.value)}
-              className="input-field"
-            >
-              <option value="2024-1">Học kỳ 1 - 2024</option>
-              <option value="2024-2">Học kỳ 2 - 2024</option>
-            </select>
+            {semesters.length === 0 ? (
+              <p className="text-gray-500 text-sm italic">Chưa có học kỳ nào được thiết lập</p>
+            ) : (
+              <select
+                value={selectedSemester}
+                onChange={(e) => setSelectedSemester(e.target.value)}
+                className="input-field"
+              >
+                {semesters.map((sem, idx) => (
+                  <option key={idx} value={sem}>{sem}</option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div className="mb-6 p-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border border-blue-100">

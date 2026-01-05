@@ -1,42 +1,152 @@
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { useWeb3 } from '../contexts/Web3Context';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+
+const DATA_API = 'http://localhost:3001/api';
+
+// Helper to save data to server
+async function saveToServer(endpoint, data) {
+  try {
+    await fetch(`${DATA_API}${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+  } catch (err) {
+    console.warn('Failed to save to data server:', err);
+  }
+}
 
 export default function AdminDashboard() {
   const { account, contract, isCorrectNetwork } = useWeb3();
+  const navigate = useNavigate();
   const [isOwner, setIsOwner] = useState(false);
-  const [stats, setStats] = useState({ students: 0, payments: 0 });
+  const [isChecking, setIsChecking] = useState(true);
+  const [stats, setStats] = useState({ 
+    students: 0, 
+    payments: 0, 
+    balance: '0',
+    collected: '0',
+    refunded: '0'
+  });
   
   // Form states
   const [newStudent, setNewStudent] = useState({ wallet: '', studentId: '' });
   const [newScholarship, setNewScholarship] = useState({ wallet: '', percent: '' });
   const [newFee, setNewFee] = useState({ semester: '', amount: '', deadline: '' });
   const [refundId, setRefundId] = useState('');
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [semesters, setSemesters] = useState([]);
+  const [pendingRequests, setPendingRequests] = useState([]);
   
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Fetch pending registration requests
+  const fetchPendingRequests = async () => {
+    try {
+      const response = await fetch(`${DATA_API}/register-requests`);
+      if (response.ok) {
+        const requests = await response.json();
+        setPendingRequests(requests);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch pending requests:', err);
+    }
+  };
+
+  // Refresh stats
+  const refreshStats = async () => {
+    if (!contract) return;
+    try {
+      const studentCount = await contract.getRegisteredStudentsCount();
+      const paymentCount = await contract.paymentCounter();
+      const [balance, collected, refunded] = await contract.getFinancialSummary();
+      const activeSemesters = await contract.getActiveSemesters();
+      
+      setStats({
+        students: Number(studentCount),
+        payments: Number(paymentCount),
+        balance: ethers.formatEther(balance),
+        collected: ethers.formatEther(collected),
+        refunded: ethers.formatEther(refunded),
+      });
+      setSemesters(activeSemesters);
+    } catch (err) {
+      console.error('Error refreshing stats:', err);
+    }
+  };
 
   // Check if current account is owner
   useEffect(() => {
     async function checkOwner() {
-      if (!contract || !account) return;
+      if (!contract || !account) {
+        setIsChecking(false);
+        return;
+      }
       try {
         const owner = await contract.owner();
-        setIsOwner(owner.toLowerCase() === account.toLowerCase());
+        const ownerCheck = owner.toLowerCase() === account.toLowerCase();
+        setIsOwner(ownerCheck);
         
-        // Get stats
-        const studentCount = await contract.getRegisteredStudentsCount();
-        const paymentCount = await contract.paymentCounter();
-        setStats({
-          students: Number(studentCount),
-          payments: Number(paymentCount),
-        });
+        if (!ownerCheck) {
+          // Not owner, redirect to home
+          navigate('/');
+          return;
+        }
+        
+        await refreshStats();
+        await fetchPendingRequests();
       } catch (err) {
         console.error('Error checking owner:', err);
+      } finally {
+        setIsChecking(false);
       }
     }
     checkOwner();
-  }, [contract, account]);
+  }, [contract, account, navigate]);
+
+  // Approve registration request
+  const handleApproveRequest = async (wallet, studentId) => {
+    setIsProcessing(true);
+    try {
+      // First register on blockchain
+      const tx = await contract.registerStudent(wallet, studentId);
+      toast.loading('Đang đăng ký sinh viên...', { id: 'approve' });
+      await tx.wait();
+      
+      // Then update API
+      await fetch(`${DATA_API}/register-approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet })
+      });
+      
+      toast.success('Đã phê duyệt đăng ký!', { id: 'approve' });
+      await refreshStats();
+      await fetchPendingRequests();
+    } catch (err) {
+      toast.error(err.reason || 'Phê duyệt thất bại!', { id: 'approve' });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Reject registration request
+  const handleRejectRequest = async (wallet) => {
+    try {
+      await fetch(`${DATA_API}/register-reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet })
+      });
+      toast.success('Đã từ chối yêu cầu đăng ký');
+      await fetchPendingRequests();
+    } catch (err) {
+      toast.error('Từ chối thất bại!');
+    }
+  };
 
   // Register student
   const handleRegisterStudent = async (e) => {
@@ -48,6 +158,10 @@ export default function AdminDashboard() {
       const tx = await contract.registerStudent(newStudent.wallet, newStudent.studentId);
       toast.loading('Đang đăng ký sinh viên...', { id: 'register' });
       await tx.wait();
+      
+      // Save to JSON file
+      await saveToServer('/students', { wallet: newStudent.wallet, studentId: newStudent.studentId });
+      
       toast.success('Đăng ký sinh viên thành công!', { id: 'register' });
       setNewStudent({ wallet: '', studentId: '' });
       setStats(prev => ({ ...prev, students: prev.students + 1 }));
@@ -58,7 +172,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // Apply scholarship
+  // Apply scholarship (auto refunds if already paid)
   const handleApplyScholarship = async (e) => {
     e.preventDefault();
     if (!contract) return;
@@ -67,9 +181,27 @@ export default function AdminDashboard() {
     try {
       const tx = await contract.applyScholarship(newScholarship.wallet, newScholarship.percent);
       toast.loading('Đang áp dụng học bổng...', { id: 'scholarship' });
-      await tx.wait();
-      toast.success('Áp dụng học bổng thành công!', { id: 'scholarship' });
+      const receipt = await tx.wait();
+      
+      // Save to JSON file
+      await saveToServer('/scholarships', { wallet: newScholarship.wallet, percent: Number(newScholarship.percent) });
+      
+      // Check if there was a scholarship refund
+      const scholarshipRefundEvent = receipt.logs.find(log => {
+        try {
+          const parsed = contract.interface.parseLog(log);
+          return parsed?.name === 'ScholarshipRefund';
+        } catch { return false; }
+      });
+      
+      if (scholarshipRefundEvent) {
+        toast.success('Học bổng đã áp dụng! Đã tự động hoàn tiền chênh lệch cho sinh viên.', { id: 'scholarship' });
+      } else {
+        toast.success('Áp dụng học bổng thành công!', { id: 'scholarship' });
+      }
+      
       setNewScholarship({ wallet: '', percent: '' });
+      await refreshStats();
     } catch (err) {
       toast.error(err.reason || 'Thất bại!', { id: 'scholarship' });
     } finally {
@@ -90,8 +222,17 @@ export default function AdminDashboard() {
       const tx = await contract.setFeeSchedule(newFee.semester, amountWei, deadlineTimestamp);
       toast.loading('Đang thiết lập học phí...', { id: 'fee' });
       await tx.wait();
+      
+      // Save to JSON file
+      await saveToServer('/fees', { 
+        semester: newFee.semester, 
+        amount: amountWei.toString(), 
+        deadline: deadlineTimestamp 
+      });
+      
       toast.success('Thiết lập học phí thành công!', { id: 'fee' });
       setNewFee({ semester: '', amount: '', deadline: '' });
+      await refreshStats();
     } catch (err) {
       toast.error(err.reason || 'Thất bại!', { id: 'fee' });
     } finally {
@@ -111,8 +252,30 @@ export default function AdminDashboard() {
       await tx.wait();
       toast.success('Hoàn tiền thành công!', { id: 'refund' });
       setRefundId('');
+      await refreshStats();
     } catch (err) {
-      toast.error(err.reason || 'Hoan tien that bai!', { id: 'refund' });
+      toast.error(err.reason || 'Hoàn tiền thất bại!', { id: 'refund' });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Withdraw to university
+  const handleWithdraw = async (e) => {
+    e.preventDefault();
+    if (!contract) return;
+    
+    setIsProcessing(true);
+    try {
+      const amountWei = withdrawAmount ? ethers.parseEther(withdrawAmount) : 0n;
+      const tx = await contract.withdrawToUniversity(amountWei);
+      toast.loading('Đang rút tiền về ví trường...', { id: 'withdraw' });
+      await tx.wait();
+      toast.success('Rút tiền thành công!', { id: 'withdraw' });
+      setWithdrawAmount('');
+      await refreshStats();
+    } catch (err) {
+      toast.error(err.reason || 'Rút tiền thất bại!', { id: 'withdraw' });
     } finally {
       setIsProcessing(false);
     }
@@ -152,6 +315,17 @@ export default function AdminDashboard() {
     );
   }
 
+  if (isChecking) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 mx-auto mb-4 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+          <p className="text-gray-500">Đang kiểm tra quyền truy cập...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!isOwner) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -181,23 +355,98 @@ export default function AdminDashboard() {
         <p className="text-gray-500">Quản lý sinh viên, học phí và hoàn tiền</p>
       </div>
 
+      {/* Pending Registration Requests */}
+      {pendingRequests.length > 0 && (
+        <div className="card mb-8 border-2 border-amber-200">
+          <div className="card-header bg-amber-50">
+            <h2 className="text-lg font-bold text-amber-800 flex items-center">
+              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Yêu cầu đăng ký chờ duyệt ({pendingRequests.length})
+            </h2>
+          </div>
+          <div className="card-body">
+            <div className="space-y-3">
+              {pendingRequests.map((req, idx) => (
+                <div key={idx} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                  <div>
+                    <p className="font-semibold text-gray-800">{req.studentId}</p>
+                    <p className="text-sm text-gray-500 font-mono">{req.wallet}</p>
+                    <p className="text-xs text-gray-400">
+                      {new Date(req.createdAt).toLocaleString('vi-VN')}
+                    </p>
+                  </div>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => handleApproveRequest(req.wallet, req.studentId)}
+                      disabled={isProcessing}
+                      className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50 transition-colors"
+                    >
+                      Duyệt
+                    </button>
+                    <button
+                      onClick={() => handleRejectRequest(req.wallet)}
+                      disabled={isProcessing}
+                      className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50 transition-colors"
+                    >
+                      Từ chối
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-6 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <div className="stat-card bg-gradient-to-br from-blue-500 to-blue-600 text-white">
           <div className="relative z-10">
             <p className="text-sm text-blue-100 mb-1">Tổng sinh viên</p>
-            <p className="text-4xl font-bold">{stats.students}</p>
+            <p className="text-3xl font-bold">{stats.students}</p>
           </div>
-          <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
+          <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
         </div>
         <div className="stat-card bg-gradient-to-br from-emerald-500 to-green-600 text-white">
           <div className="relative z-10">
-            <p className="text-sm text-emerald-100 mb-1">Tổng giao dịch</p>
-            <p className="text-4xl font-bold">{stats.payments}</p>
+            <p className="text-sm text-emerald-100 mb-1">Tổng thu</p>
+            <p className="text-3xl font-bold">{stats.collected} <span className="text-sm">ETH</span></p>
           </div>
-          <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
+          <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
+        </div>
+        <div className="stat-card bg-gradient-to-br from-amber-500 to-orange-600 text-white">
+          <div className="relative z-10">
+            <p className="text-sm text-amber-100 mb-1">Số dư Contract</p>
+            <p className="text-3xl font-bold">{stats.balance} <span className="text-sm">ETH</span></p>
+          </div>
+          <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
+        </div>
+        <div className="stat-card bg-gradient-to-br from-red-500 to-rose-600 text-white">
+          <div className="relative z-10">
+            <p className="text-sm text-red-100 mb-1">Đã hoàn tiền</p>
+            <p className="text-3xl font-bold">{stats.refunded} <span className="text-sm">ETH</span></p>
+          </div>
+          <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
         </div>
       </div>
+
+      {/* Semesters List */}
+      {semesters.length > 0 && (
+        <div className="card mb-8">
+          <div className="card-header">
+            <h2 className="text-lg font-bold text-gray-800">Các học kỳ đã thiết lập</h2>
+          </div>
+          <div className="card-body">
+            <div className="flex flex-wrap gap-2">
+              {semesters.map((sem, idx) => (
+                <span key={idx} className="badge badge-primary">{sem}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid md:grid-cols-2 gap-6">
         {/* Register Student */}
@@ -244,6 +493,11 @@ export default function AdminDashboard() {
             </h2>
           </div>
           <div className="card-body">
+            <div className="p-3 mb-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-700">
+                Nếu sinh viên đã thanh toán, hệ thống sẽ <strong>tự động hoàn tiền</strong> phần chênh lệch.
+              </p>
+            </div>
             <form onSubmit={handleApplyScholarship} className="space-y-4">
               <input
                 type="text"
@@ -341,6 +595,38 @@ export default function AdminDashboard() {
                 className="w-full btn-danger"
               >
                 Hoàn tiền
+              </button>
+            </form>
+          </div>
+        </div>
+
+        {/* Withdraw to University */}
+        <div className="card">
+          <div className="card-header">
+            <h2 className="text-lg font-bold text-gray-800">
+              Rút tiền về ví trường
+            </h2>
+          </div>
+          <div className="card-body">
+            <div className="p-3 mb-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+              <p className="text-sm text-emerald-700">
+                Số dư khả dụng: <strong>{stats.balance} ETH</strong>
+              </p>
+            </div>
+            <form onSubmit={handleWithdraw} className="space-y-4">
+              <input
+                type="text"
+                placeholder="Số tiền (ETH) - để trống = rút tất cả"
+                value={withdrawAmount}
+                onChange={(e) => setWithdrawAmount(e.target.value)}
+                className="input-field"
+              />
+              <button
+                type="submit"
+                disabled={isProcessing || parseFloat(stats.balance) === 0}
+                className="w-full px-6 py-3 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl font-semibold shadow-lg shadow-emerald-500/30 hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-50"
+              >
+                Rút tiền
               </button>
             </form>
           </div>

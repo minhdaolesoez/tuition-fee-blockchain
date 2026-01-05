@@ -1,9 +1,10 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import Navbar from './components/Navbar';
 import StudentDashboard from './pages/StudentDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import PaymentHistory from './pages/PaymentHistory';
+import HomePage from './pages/HomePage';
 
 function App() {
   return (
@@ -12,7 +13,8 @@ function App() {
         <Navbar />
         <main className="container mx-auto px-4 py-8">
           <Routes>
-            <Route path="/" element={<StudentDashboard />} />
+            <Route path="/" element={<HomePage />} />
+            <Route path="/student" element={<StudentDashboard />} />
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/history" element={<PaymentHistory />} />
           </Routes>

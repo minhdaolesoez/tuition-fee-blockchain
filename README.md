@@ -68,9 +68,13 @@ npm start
 ```
 
 Lệnh này sẽ tự động:
-1. Khởi động Hardhat node (blockchain local)
-2. Deploy smart contract  
-3. Khởi động frontend tại http://localhost:3000
+1. Khởi động Data Server (port 3001) - lưu trữ dữ liệu
+2. Khởi động Hardhat node (blockchain local)
+3. Deploy smart contract  
+4. **Restore dữ liệu** từ file `data/state.json` (sinh viên, học phí, học bổng, thanh toán)
+5. Khởi động frontend tại http://localhost:3000
+
+> 💡 **Tính năng mới**: Dữ liệu được lưu vào file JSON và tự động restore khi restart!
 
 ---
 
@@ -121,6 +125,13 @@ Address: 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
 
 ## Hướng dẫn sử dụng
 
+### Tự động định tuyến
+
+Hệ thống tự động chuyển hướng dựa trên tài khoản:
+- **Admin** (0xf39F...) → Trang Quản trị
+- **Sinh viên đã đăng ký** → Trang Sinh viên  
+- **Chưa đăng ký** → Form đăng ký (gửi yêu cầu cho Admin duyệt)
+
 ### Quy trình demo đầy đủ:
 
 #### 1. Đăng nhập Admin
@@ -136,11 +147,18 @@ Address: 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
   - Deadline: chọn ngày trong tương lai
 - Nhấn "Thiết lập" → Xác nhận trong MetaMask
 
-#### 3. Đăng ký sinh viên (Admin)
+#### 3. Đăng ký sinh viên (2 cách)
+
+**Cách 1: Admin đăng ký trực tiếp**
 - Phần "Đăng ký sinh viên":
   - Địa chỉ ví: `0x70997970C51812dc3A010C7d01b50e0d17dc79C8`
   - Mã sinh viên: `SV001`
 - Nhấn "Đăng ký" → Xác nhận
+
+**Cách 2: Sinh viên tự đăng ký (Admin duyệt)**
+- Sinh viên kết nối MetaMask → Vào trang chủ
+- Nhập mã sinh viên → Gửi yêu cầu
+- Admin vào phần "Yêu cầu đăng ký chờ duyệt" → Duyệt/Từ chối
 
 #### 4. Áp dụng học bổng (Admin - tuỳ chọn)
 - Phần "Áp dụng học bổng":
@@ -169,14 +187,19 @@ tuition-fee-blockchain/
 ├── scripts/
 │   ├── deploy.js               # Script deploy
 │   ├── demo.js                 # Demo tự động  
-│   └── start.js                # Script khởi động all-in-one
+│   ├── start.js                # Script khởi động all-in-one
+│   ├── data-server.js          # API server lưu dữ liệu (port 3001)
+│   ├── data-manager.js         # CRUD operations cho state.json
+│   └── restore-data.js         # Restore dữ liệu khi restart
+├── data/
+│   └── state.json              # Dữ liệu persist (students, fees, payments...)
 ├── test/
 │   └── TuitionFeeContract.test.js  # Unit tests (13 tests)
 ├── client/                     # React frontend
 │   ├── src/
 │   │   ├── components/         # React components
 │   │   ├── contexts/           # Web3 context
-│   │   ├── pages/              # Các trang
+│   │   ├── pages/              # Các trang (Home, Admin, Student, History)
 │   │   └── config/             # Cấu hình contract
 │   └── package.json
 ├── hardhat.config.js           # Cấu hình Hardhat
@@ -229,6 +252,11 @@ Mỗi lần restart Hardhat node, blockchain được reset. Cần:
 1. Clear activity data trong MetaMask (xem mục 1)
 2. Refresh trang web
 
+> ✅ **Lưu ý**: Dữ liệu (sinh viên, học phí, học bổng, thanh toán) được tự động restore từ `data/state.json`
+
+### 6. Muốn reset toàn bộ dữ liệu
+Xóa file `data/state.json` rồi restart `npm start`.
+
 ---
 
 ## Smart Contract API
@@ -238,10 +266,11 @@ Mỗi lần restart Hardhat node, blockchain được reset. Cần:
 
 ### Hàm cho Admin
 - `registerStudent(wallet, studentId)` - Đăng ký sinh viên
-- `applyScholarship(wallet, percent)` - Áp dụng học bổng (0-100%)
+- `applyScholarship(wallet, percent)` - Áp dụng học bổng (0-100%), tự động hoàn tiền nếu đã đóng
 - `setFeeSchedule(semester, amount, deadline)` - Thiết lập học phí
 - `processRefund(paymentId)` - Hoàn tiền
-- `depositForRefund()` - Nạp ETH vào quỹ hoàn tiền
+- `withdrawToUniversity(amount)` - Rút tiền về ví trường
+- `restorePayment(wallet, semester, amount, timestamp)` - Restore payment từ backup
 
 ### Hàm View (đọc dữ liệu)
 - `calculateFee(student, semester)` - Tính học phí sau học bổng

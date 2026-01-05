@@ -10,7 +10,12 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
  * @notice Enables transparent, real-time settlement without bank reconciliation
  * 
  * Architecture:
- * Student (MetaMask) -> React Frontend -> TuitionFeeContract -> University Wallet
+ * Student (MetaMask) -> React Frontend -> TuitionFeeContract (holds funds) -> University withdraws
+ * 
+ * Simplified flow:
+ * - Payments stay in contract (university can withdraw anytime)
+ * - When scholarship applied -> auto refund overpayments
+ * - No separate refund pool needed
  */
 contract TuitionFeeContract is Ownable, ReentrancyGuard {
     
@@ -21,6 +26,7 @@ contract TuitionFeeContract is Ownable, ReentrancyGuard {
         string studentId;
         string semester;
         uint256 amount;
+        uint256 amountAfterRefund; // Track remaining amount after scholarship refunds
         uint256 timestamp;
         bool paid;
         bool refunded;
@@ -44,6 +50,8 @@ contract TuitionFeeContract is Ownable, ReentrancyGuard {
     
     address public universityWallet;
     uint256 public paymentCounter;
+    uint256 public totalCollected; // Total tuition collected
+    uint256 public totalRefunded;  // Total refunded to students
     
     // Mappings
     mapping(uint256 => Payment) public payments;
@@ -51,6 +59,7 @@ contract TuitionFeeContract is Ownable, ReentrancyGuard {
     mapping(string => address) public studentIdToAddress;
     mapping(string => FeeSchedule) public feeSchedules;
     mapping(address => mapping(string => uint256)) public studentSemesterPayment; // student -> semester -> paymentId
+    mapping(address => uint256[]) public studentPaymentIds; // student -> array of payment IDs
     
     // Arrays for enumeration
     string[] public activeSemesters;
@@ -59,7 +68,7 @@ contract TuitionFeeContract is Ownable, ReentrancyGuard {
     // ============ Events ============
     
     event StudentRegistered(address indexed wallet, string studentId, uint256 timestamp);
-    event ScholarshipApplied(address indexed student, uint256 percent);
+    event ScholarshipApplied(address indexed student, uint256 percent, uint256 totalRefunded);
     event PaymentReceived(
         uint256 indexed paymentId,
         address indexed student,
@@ -74,8 +83,15 @@ contract TuitionFeeContract is Ownable, ReentrancyGuard {
         uint256 amount,
         uint256 timestamp
     );
+    event ScholarshipRefund(
+        address indexed student,
+        uint256 indexed paymentId,
+        uint256 refundAmount,
+        uint256 timestamp
+    );
     event FeeScheduleCreated(string semester, uint256 baseAmount, uint256 deadline);
     event UniversityWalletUpdated(address oldWallet, address newWallet);
+    event UniversityWithdrawal(address indexed wallet, uint256 amount, uint256 timestamp);
     
     // ============ Modifiers ============
     
@@ -126,19 +142,67 @@ contract TuitionFeeContract is Ownable, ReentrancyGuard {
     
     /**
      * @dev Apply scholarship discount to a student
+     * @notice Automatically refunds overpayments if student already paid
      * @param _studentAddress Student's wallet address
      * @param _percent Scholarship percentage (0-100)
      */
     function applyScholarship(
         address _studentAddress,
         uint256 _percent
-    ) external onlyOwner {
+    ) external onlyOwner nonReentrant {
         require(students[_studentAddress].isRegistered, "Student not registered");
         require(_percent <= 100, "Invalid percentage");
         
+        uint256 oldPercent = students[_studentAddress].scholarshipPercent;
         students[_studentAddress].scholarshipPercent = _percent;
         
-        emit ScholarshipApplied(_studentAddress, _percent);
+        // If new scholarship is higher, refund difference for all payments
+        uint256 totalRefundAmount = 0;
+        if (_percent > oldPercent) {
+            uint256[] memory paymentIds = studentPaymentIds[_studentAddress];
+            
+            for (uint256 i = 0; i < paymentIds.length; i++) {
+                Payment storage payment = payments[paymentIds[i]];
+                
+                // Only process non-refunded payments
+                if (payment.paid && !payment.refunded && payment.amountAfterRefund > 0) {
+                    // Get base fee for this semester
+                    uint256 baseFee = feeSchedules[payment.semester].baseAmount;
+                    
+                    // Calculate what they should have paid with new scholarship
+                    uint256 shouldPay = baseFee - (baseFee * _percent / 100);
+                    
+                    // Calculate what they should have paid with old scholarship
+                    uint256 paidFor = baseFee - (baseFee * oldPercent / 100);
+                    
+                    // Refund the difference if they overpaid
+                    if (paidFor > shouldPay) {
+                        uint256 refundAmount = paidFor - shouldPay;
+                        
+                        // Make sure we don't refund more than what's left in the payment
+                        if (refundAmount > payment.amountAfterRefund) {
+                            refundAmount = payment.amountAfterRefund;
+                        }
+                        
+                        payment.amountAfterRefund -= refundAmount;
+                        totalRefundAmount += refundAmount;
+                        
+                        emit ScholarshipRefund(_studentAddress, paymentIds[i], refundAmount, block.timestamp);
+                    }
+                }
+            }
+            
+            // Send total refund to student
+            if (totalRefundAmount > 0) {
+                require(address(this).balance >= totalRefundAmount, "Insufficient contract balance");
+                totalRefunded += totalRefundAmount;
+                
+                (bool success, ) = _studentAddress.call{value: totalRefundAmount}("");
+                require(success, "Refund transfer failed");
+            }
+        }
+        
+        emit ScholarshipApplied(_studentAddress, _percent, totalRefundAmount);
     }
     
     /**
@@ -182,10 +246,20 @@ contract TuitionFeeContract is Ownable, ReentrancyGuard {
     }
     
     /**
-     * @dev Deposit ETH to contract for refund pool
+     * @dev University withdraws collected tuition fees
+     * @param _amount Amount to withdraw (0 = withdraw all available)
      */
-    function depositForRefund() external payable onlyOwner {
-        require(msg.value > 0, "Must send ETH");
+    function withdrawToUniversity(uint256 _amount) external onlyOwner nonReentrant {
+        uint256 availableBalance = address(this).balance;
+        require(availableBalance > 0, "No funds to withdraw");
+        
+        uint256 withdrawAmount = _amount == 0 ? availableBalance : _amount;
+        require(withdrawAmount <= availableBalance, "Insufficient balance");
+        
+        (bool success, ) = universityWallet.call{value: withdrawAmount}("");
+        require(success, "Withdrawal failed");
+        
+        emit UniversityWithdrawal(universityWallet, withdrawAmount, block.timestamp);
     }
     
     /**
@@ -196,27 +270,93 @@ contract TuitionFeeContract is Ownable, ReentrancyGuard {
         Payment storage payment = payments[_paymentId];
         require(payment.paid, "Payment not found");
         require(!payment.refunded, "Already refunded");
-        require(address(this).balance >= payment.amount, "Insufficient refund pool");
+        require(payment.amountAfterRefund > 0, "Nothing to refund");
+        require(address(this).balance >= payment.amountAfterRefund, "Insufficient contract balance");
         
+        uint256 refundAmount = payment.amountAfterRefund;
         payment.refunded = true;
+        payment.amountAfterRefund = 0;
+        totalRefunded += refundAmount;
         
-        (bool success, ) = payment.student.call{value: payment.amount}("");
+        (bool success, ) = payment.student.call{value: refundAmount}("");
         require(success, "Refund transfer failed");
         
-        emit RefundProcessed(_paymentId, payment.student, payment.amount, block.timestamp);
+        emit RefundProcessed(_paymentId, payment.student, refundAmount, block.timestamp);
+    }
+
+    /**
+     * @dev Restore payment record from backup (for dev/test after Hardhat restart)
+     * @notice This creates a payment record without requiring ETH transfer
+     * @param _studentAddress Student's wallet address
+     * @param _semester Semester identifier
+     * @param _amount Original payment amount
+     * @param _timestamp Original payment timestamp
+     */
+    function restorePayment(
+        address _studentAddress,
+        string memory _semester,
+        uint256 _amount,
+        uint256 _timestamp
+    ) external onlyOwner {
+        require(students[_studentAddress].isRegistered, "Student not registered");
+        require(studentSemesterPayment[_studentAddress][_semester] == 0, "Payment already exists");
+        
+        paymentCounter++;
+        
+        // Calculate amount after scholarship
+        uint256 scholarshipPercent = students[_studentAddress].scholarshipPercent;
+        uint256 baseFee = feeSchedules[_semester].baseAmount;
+        uint256 shouldPay = baseFee - (baseFee * scholarshipPercent / 100);
+        uint256 amountAfterRefund = _amount > shouldPay ? shouldPay : _amount;
+        
+        payments[paymentCounter] = Payment({
+            student: _studentAddress,
+            studentId: students[_studentAddress].studentId,
+            semester: _semester,
+            amount: _amount,
+            amountAfterRefund: amountAfterRefund,
+            timestamp: _timestamp,
+            paid: true,
+            refunded: false
+        });
+        
+        studentSemesterPayment[_studentAddress][_semester] = paymentCounter;
+        studentPaymentIds[_studentAddress].push(paymentCounter);
+        totalCollected += _amount;
+        
+        emit PaymentReceived(
+            paymentCounter,
+            _studentAddress,
+            students[_studentAddress].studentId,
+            _semester,
+            _amount,
+            _timestamp
+        );
+    }
+
+    /**
+     * @dev Get contract balance (available for withdrawal/refunds)
+     */
+    function getContractBalance() external view returns (uint256) {
+        return address(this).balance;
     }
     
     /**
-     * @dev Get contract balance (refund pool)
+     * @dev Get financial summary
      */
-    function getRefundPoolBalance() external view returns (uint256) {
-        return address(this).balance;
+    function getFinancialSummary() external view returns (
+        uint256 balance,
+        uint256 collected,
+        uint256 refunded
+    ) {
+        return (address(this).balance, totalCollected, totalRefunded);
     }
     
     // ============ Student Functions ============
     
     /**
      * @dev Pay tuition fee for a semester
+     * @notice Payment stays in contract, university can withdraw anytime
      * @param _semester Semester to pay for
      */
     function payTuition(
@@ -234,16 +374,17 @@ contract TuitionFeeContract is Ownable, ReentrancyGuard {
             studentId: students[msg.sender].studentId,
             semester: _semester,
             amount: msg.value,
+            amountAfterRefund: msg.value, // Initially same as amount
             timestamp: block.timestamp,
             paid: true,
             refunded: false
         });
         
         studentSemesterPayment[msg.sender][_semester] = paymentCounter;
+        studentPaymentIds[msg.sender].push(paymentCounter);
+        totalCollected += msg.value;
         
-        // Transfer to university wallet
-        (bool success, ) = universityWallet.call{value: msg.value}("");
-        require(success, "Transfer to university failed");
+        // Payment stays in contract - university can withdraw later
         
         emit PaymentReceived(
             paymentCounter,
@@ -343,5 +484,22 @@ contract TuitionFeeContract is Ownable, ReentrancyGuard {
         }
         
         return result;
+    }
+
+    /**
+     * @dev Get all active semesters
+     * @return Array of semester identifiers
+     */
+    function getActiveSemesters() external view returns (string[] memory) {
+        return activeSemesters;
+    }
+
+    /**
+     * @dev Get fee schedule for a semester
+     * @param _semester Semester identifier
+     * @return FeeSchedule struct
+     */
+    function getFeeSchedule(string memory _semester) external view returns (FeeSchedule memory) {
+        return feeSchedules[_semester];
     }
 }
