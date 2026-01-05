@@ -1,0 +1,7 @@
+node_modules/
+cache/
+artifacts/
+.env
+client/node_modules/
+client/dist/
+*.log

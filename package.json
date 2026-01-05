@@ -1,0 +1,24 @@
+{
+  "name": "tuition-fee-blockchain",
+  "version": "1.0.0",
+  "description": "Blockchain-based tuition fee payment system with automated reconciliation",
+  "scripts": {
+    "start": "node scripts/start.js",
+    "compile": "npx hardhat compile",
+    "test": "npx hardhat test",
+    "demo": "npx hardhat run scripts/demo.js",
+    "deploy:local": "npx hardhat run scripts/deploy.js --network localhost",
+    "deploy:sepolia": "npx hardhat run scripts/deploy.js --network sepolia",
+    "node": "npx hardhat node",
+    "client:dev": "cd client && npm run dev",
+    "client:build": "cd client && npm run build"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "hardhat": "^2.19.0"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.0",
+    "dotenv": "^16.3.1"
+  }
+}
