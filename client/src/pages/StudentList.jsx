@@ -17,6 +17,11 @@ export default function StudentList() {
   const [newStudentWallet, setNewStudentWallet] = useState('');
   const [newStudentId, setNewStudentId] = useState('');
   const [registering, setRegistering] = useState(false);
+  
+  // Refund Modal
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [refundPayment, setRefundPayment] = useState(null);
+  const [refundAmount, setRefundAmount] = useState('');
 
   useEffect(() => {
     if (contract && isOwner) {
@@ -104,15 +109,38 @@ export default function StudentList() {
     }
   };
 
-  const handleRefund = async (paymentId) => {
-    if (!contract) return;
+  const openRefundModal = (payment, studentId) => {
+    setRefundPayment({ ...payment, studentId });
+    setRefundAmount(ethers.formatEther(payment.amountAfterRefund));
+    setShowRefundModal(true);
+  };
+
+  const closeRefundModal = () => {
+    setShowRefundModal(false);
+    setRefundPayment(null);
+    setRefundAmount('');
+  };
+
+  const handleRefund = async () => {
+    if (!contract || !refundPayment) return;
 
     try {
-      setProcessingRefund(paymentId);
-      const tx = await contract.processRefund(paymentId);
+      const amountWei = ethers.parseEther(refundAmount);
+      if (amountWei <= 0) {
+        toast.error('Refund amount must be greater than 0');
+        return;
+      }
+      if (amountWei > refundPayment.amountAfterRefund) {
+        toast.error('Refund amount exceeds available balance');
+        return;
+      }
+
+      setProcessingRefund(refundPayment.id);
+      const tx = await contract.processRefund(refundPayment.id, amountWei);
       toast.loading('Processing refund...', { id: 'refund' });
       await tx.wait();
       toast.success('Refund processed successfully!', { id: 'refund' });
+      closeRefundModal();
       
       // Wait a bit for blockchain state to update, then reload
       setTimeout(() => {
@@ -318,9 +346,9 @@ export default function StudentList() {
                             )}
                           </td>
                           <td className="py-3 px-4 text-center">
-                            {payment && payment.paid && !payment.refunded && (
+                            {payment && payment.paid && !payment.refunded && payment.amountAfterRefund > 0 && (
                               <button
-                                onClick={() => handleRefund(payment.id)}
+                                onClick={() => openRefundModal(payment, student.studentId)}
                                 disabled={processingRefund === payment.id}
                                 className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-medium transition-all disabled:opacity-50"
                               >
@@ -342,6 +370,75 @@ export default function StudentList() {
           Total: {filteredStudents.length} student(s)
         </div>
       </div>
+
+      {/* Refund Modal */}
+      {showRefundModal && refundPayment && (
+        <div className="fixed inset-0 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl animate-slide-up">
+            <h3 className="text-xl font-bold text-gray-800 mb-4">Process Refund</h3>
+            
+            <div className="space-y-4">
+              <div className="bg-gray-50 rounded-xl p-4">
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-gray-500">Student ID:</span>
+                  <span className="font-bold text-blue-600">{refundPayment.studentId}</span>
+                </div>
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-gray-500">Semester:</span>
+                  <span className="font-medium">{refundPayment.semester}</span>
+                </div>
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-gray-500">Original Amount:</span>
+                  <span className="font-medium">{ethers.formatEther(refundPayment.amount)} ETH</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Available for Refund:</span>
+                  <span className="font-bold text-emerald-600">{ethers.formatEther(refundPayment.amountAfterRefund)} ETH</span>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Refund Amount (ETH)
+                </label>
+                <input
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  max={ethers.formatEther(refundPayment.amountAfterRefund)}
+                  value={refundAmount}
+                  onChange={(e) => setRefundAmount(e.target.value)}
+                  className="input-field"
+                  placeholder="Enter refund amount"
+                />
+                <button
+                  type="button"
+                  onClick={() => setRefundAmount(ethers.formatEther(refundPayment.amountAfterRefund))}
+                  className="text-sm text-emerald-600 hover:text-emerald-700 mt-1"
+                >
+                  Refund full amount
+                </button>
+              </div>
+            </div>
+            
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={closeRefundModal}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRefund}
+                disabled={processingRefund || !refundAmount || parseFloat(refundAmount) <= 0}
+                className="flex-1 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-medium transition-all disabled:opacity-50"
+              >
+                {processingRefund ? 'Processing...' : 'Confirm Refund'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

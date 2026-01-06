@@ -270,25 +270,32 @@ contract TuitionFeeContract is Ownable, ReentrancyGuard {
     }
     
     /**
-     * @dev Process refund for course withdrawal
+     * @dev Process partial refund for course withdrawal
      * @param _paymentId Payment ID to refund
+     * @param _refundAmount Amount to refund (must be <= amountAfterRefund)
      */
-    function processRefund(uint256 _paymentId) external onlyOwner nonReentrant {
+    function processRefund(uint256 _paymentId, uint256 _refundAmount) external onlyOwner nonReentrant {
         Payment storage payment = payments[_paymentId];
         require(payment.paid, "Payment not found");
         require(!payment.refunded, "Already refunded");
         require(payment.amountAfterRefund > 0, "Nothing to refund");
-        require(address(this).balance >= payment.amountAfterRefund, "Insufficient contract balance");
+        require(_refundAmount > 0, "Refund amount must be greater than 0");
+        require(_refundAmount <= payment.amountAfterRefund, "Refund amount exceeds available balance");
+        require(address(this).balance >= _refundAmount, "Insufficient contract balance");
         
-        uint256 refundAmount = payment.amountAfterRefund;
-        payment.refunded = true;
-        payment.amountAfterRefund = 0;
-        totalRefunded += refundAmount;
+        payment.amountAfterRefund -= _refundAmount;
         
-        (bool success, ) = payment.student.call{value: refundAmount}("");
+        // Only mark as fully refunded if all amount has been refunded
+        if (payment.amountAfterRefund == 0) {
+            payment.refunded = true;
+        }
+        
+        totalRefunded += _refundAmount;
+        
+        (bool success, ) = payment.student.call{value: _refundAmount}("");
         require(success, "Refund transfer failed");
         
-        emit RefundProcessed(_paymentId, payment.student, refundAmount, block.timestamp);
+        emit RefundProcessed(_paymentId, payment.student, _refundAmount, block.timestamp);
     }
 
     /**

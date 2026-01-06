@@ -32,7 +32,7 @@ export const CONTRACT_ABI = [
   "function applyScholarship(address _studentAddress, uint256 _percent)",
   "function setFeeSchedule(string _semester, uint256 _baseAmount, uint256 _deadline)",
   "function payTuition(string _semester) payable",
-  "function processRefund(uint256 _paymentId)",
+  "function processRefund(uint256 _paymentId, uint256 _refundAmount)",
   "function withdrawToUniversity(uint256 _amount)",
   "function setUniversityWallet(address _newWallet)",
   
