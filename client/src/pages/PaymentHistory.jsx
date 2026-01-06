@@ -48,9 +48,9 @@ export default function PaymentHistory() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
             <h2 className="text-xl font-bold text-gray-800 mb-2">
-              Sai mạng
+              Wrong Network
             </h2>
-            <p className="text-gray-500">Vui lòng kết nối đúng mạng Hardhat localhost</p>
+            <p className="text-gray-500">Please connect to Hardhat localhost network</p>
           </div>
         </div>
       </div>
@@ -63,24 +63,24 @@ export default function PaymentHistory() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold gradient-text mb-2">
-            Lịch Sử Thanh Toán
+            Payment History
           </h1>
           <p className="text-gray-500">
-            Theo dõi tất cả giao dịch trên blockchain
+            Track all transactions on blockchain
           </p>
         </div>
         <div className="badge badge-primary text-base px-6 py-3">
           <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
           </svg>
-          Tổng: {totalPayments} giao dịch
+          Total: {totalPayments} transactions
         </div>
       </div>
 
       {isLoading ? (
         <div className="text-center py-20">
           <div className="spinner mx-auto mb-4"></div>
-          <p className="text-gray-500">Đang tải lịch sử giao dịch...</p>
+          <p className="text-gray-500">Loading transaction history...</p>
         </div>
       ) : payments.length === 0 ? (
         <div className="card">
@@ -88,8 +88,8 @@ export default function PaymentHistory() {
             <svg className="w-20 h-20 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
             </svg>
-            <h3 className="text-xl font-semibold text-gray-700 mb-2">Chưa có giao dịch nào</h3>
-            <p className="text-gray-500">Các giao dịch sẽ được hiển thị ở đây khi có thanh toán</p>
+            <h3 className="text-xl font-semibold text-gray-700 mb-2">No transactions yet</h3>
+            <p className="text-gray-500">Transactions will be displayed here when payments are made</p>
           </div>
         </div>
       ) : (
@@ -99,12 +99,12 @@ export default function PaymentHistory() {
               <thead>
                 <tr>
                   <th>#</th>
-                  <th>Sinh viên</th>
-                  <th>Ví</th>
-                  <th>Học kỳ</th>
-                  <th>Số tiền</th>
-                  <th>Thời gian</th>
-                  <th>Trạng thái</th>
+                  <th>Student</th>
+                  <th>Wallet</th>
+                  <th>Semester</th>
+                  <th>Amount</th>
+                  <th>Time</th>
+                  <th>Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -131,7 +131,7 @@ export default function PaymentHistory() {
                       </div>
                       {payment.amount !== payment.amountAfterRefund && payment.amountAfterRefund && (
                         <div className="text-xs text-gray-400">
-                          Gốc: {ethers.formatEther(payment.amount)} ETH
+                          Original: {ethers.formatEther(payment.amount)} ETH
                         </div>
                       )}
                     </td>
@@ -141,15 +141,15 @@ export default function PaymentHistory() {
                     <td>
                       {payment.refunded ? (
                         <span className="badge badge-warning">
-                          Đã hoàn
+                          Refunded
                         </span>
                       ) : payment.paid ? (
                         <span className="badge badge-success">
-                          Thành công
+                          Success
                         </span>
                       ) : (
                         <span className="badge badge-danger">
-                          Thất bại
+                          Failed
                         </span>
                       )}
                     </td>
@@ -172,11 +172,11 @@ export default function PaymentHistory() {
             </div>
             <div>
               <h3 className="font-bold text-blue-800 text-lg mb-2">
-                Tính minh bạch (Transparency)
+                Transparency
               </h3>
               <p className="text-blue-700">
-                Tất cả giao dịch được ghi lại trên blockchain và có thể kiểm tra bất kỳ lúc nào.
-                Không cần đối soát ngân hàng, real-time settlement, và audit được hoàn toàn.
+                All transactions are recorded on blockchain and can be verified at any time.
+                No bank reconciliation needed, real-time settlement, and fully auditable.
               </p>
             </div>
           </div>

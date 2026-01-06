@@ -113,7 +113,7 @@ export default function AdminDashboard() {
     try {
       // First register on blockchain
       const tx = await contract.registerStudent(wallet, studentId);
-      toast.loading('Đang đăng ký sinh viên...', { id: 'approve' });
+      toast.loading('Registering student...', { id: 'approve' });
       await tx.wait();
       
       // Then update API
@@ -123,11 +123,11 @@ export default function AdminDashboard() {
         body: JSON.stringify({ wallet })
       });
       
-      toast.success('Đã phê duyệt đăng ký!', { id: 'approve' });
+      toast.success('Registration approved!', { id: 'approve' });
       await refreshStats();
       await fetchPendingRequests();
     } catch (err) {
-      toast.error(err.reason || 'Phê duyệt thất bại!', { id: 'approve' });
+      toast.error(err.reason || 'Approval failed!', { id: 'approve' });
     } finally {
       setIsProcessing(false);
     }
@@ -141,10 +141,10 @@ export default function AdminDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ wallet })
       });
-      toast.success('Đã từ chối yêu cầu đăng ký');
+      toast.success('Registration request rejected');
       await fetchPendingRequests();
     } catch (err) {
-      toast.error('Từ chối thất bại!');
+      toast.error('Rejection failed!');
     }
   };
 
@@ -156,17 +156,17 @@ export default function AdminDashboard() {
     setIsProcessing(true);
     try {
       const tx = await contract.registerStudent(newStudent.wallet, newStudent.studentId);
-      toast.loading('Đang đăng ký sinh viên...', { id: 'register' });
+      toast.loading('Registering student...', { id: 'register' });
       await tx.wait();
       
       // Save to JSON file
       await saveToServer('/students', { wallet: newStudent.wallet, studentId: newStudent.studentId });
       
-      toast.success('Đăng ký sinh viên thành công!', { id: 'register' });
+      toast.success('Student registered successfully!', { id: 'register' });
       setNewStudent({ wallet: '', studentId: '' });
       setStats(prev => ({ ...prev, students: prev.students + 1 }));
     } catch (err) {
-      toast.error(err.reason || 'Đăng ký thất bại!', { id: 'register' });
+      toast.error(err.reason || 'Registration failed!', { id: 'register' });
     } finally {
       setIsProcessing(false);
     }
@@ -180,7 +180,7 @@ export default function AdminDashboard() {
     setIsProcessing(true);
     try {
       const tx = await contract.applyScholarship(newScholarship.wallet, newScholarship.percent);
-      toast.loading('Đang áp dụng học bổng...', { id: 'scholarship' });
+      toast.loading('Applying scholarship...', { id: 'scholarship' });
       const receipt = await tx.wait();
       
       // Save to JSON file
@@ -195,15 +195,15 @@ export default function AdminDashboard() {
       });
       
       if (scholarshipRefundEvent) {
-        toast.success('Học bổng đã áp dụng! Đã tự động hoàn tiền chênh lệch cho sinh viên.', { id: 'scholarship' });
+        toast.success('Scholarship applied! Auto-refunded the difference to student.', { id: 'scholarship' });
       } else {
-        toast.success('Áp dụng học bổng thành công!', { id: 'scholarship' });
+        toast.success('Scholarship applied successfully!', { id: 'scholarship' });
       }
       
       setNewScholarship({ wallet: '', percent: '' });
       await refreshStats();
     } catch (err) {
-      toast.error(err.reason || 'Thất bại!', { id: 'scholarship' });
+      toast.error(err.reason || 'Failed!', { id: 'scholarship' });
     } finally {
       setIsProcessing(false);
     }
@@ -220,7 +220,7 @@ export default function AdminDashboard() {
       const deadlineTimestamp = Math.floor(new Date(newFee.deadline).getTime() / 1000);
       
       const tx = await contract.setFeeSchedule(newFee.semester, amountWei, deadlineTimestamp);
-      toast.loading('Đang thiết lập học phí...', { id: 'fee' });
+      toast.loading('Setting up tuition fee...', { id: 'fee' });
       await tx.wait();
       
       // Save to JSON file
@@ -230,11 +230,11 @@ export default function AdminDashboard() {
         deadline: deadlineTimestamp 
       });
       
-      toast.success('Thiết lập học phí thành công!', { id: 'fee' });
+      toast.success('Tuition fee set successfully!', { id: 'fee' });
       setNewFee({ semester: '', amount: '', deadline: '' });
       await refreshStats();
     } catch (err) {
-      toast.error(err.reason || 'Thất bại!', { id: 'fee' });
+      toast.error(err.reason || 'Failed!', { id: 'fee' });
     } finally {
       setIsProcessing(false);
     }
@@ -248,13 +248,13 @@ export default function AdminDashboard() {
     setIsProcessing(true);
     try {
       const tx = await contract.processRefund(refundId);
-      toast.loading('Đang xử lý hoàn tiền...', { id: 'refund' });
+      toast.loading('Processing refund...', { id: 'refund' });
       await tx.wait();
-      toast.success('Hoàn tiền thành công!', { id: 'refund' });
+      toast.success('Refund successful!', { id: 'refund' });
       setRefundId('');
       await refreshStats();
     } catch (err) {
-      toast.error(err.reason || 'Hoàn tiền thất bại!', { id: 'refund' });
+      toast.error(err.reason || 'Refund failed!', { id: 'refund' });
     } finally {
       setIsProcessing(false);
     }
@@ -269,13 +269,13 @@ export default function AdminDashboard() {
     try {
       const amountWei = withdrawAmount ? ethers.parseEther(withdrawAmount) : 0n;
       const tx = await contract.withdrawToUniversity(amountWei);
-      toast.loading('Đang rút tiền về ví trường...', { id: 'withdraw' });
+      toast.loading('Withdrawing to university wallet...', { id: 'withdraw' });
       await tx.wait();
-      toast.success('Rút tiền thành công!', { id: 'withdraw' });
+      toast.success('Withdrawal successful!', { id: 'withdraw' });
       setWithdrawAmount('');
       await refreshStats();
     } catch (err) {
-      toast.error(err.reason || 'Rút tiền thất bại!', { id: 'withdraw' });
+      toast.error(err.reason || 'Withdrawal failed!', { id: 'withdraw' });
     } finally {
       setIsProcessing(false);
     }
@@ -291,7 +291,7 @@ export default function AdminDashboard() {
             </svg>
           </div>
           <h2 className="text-2xl font-bold text-gray-700 mb-4">
-            Vui lòng kết nối ví MetaMask
+            Please connect MetaMask wallet
           </h2>
         </div>
       </div>
@@ -308,7 +308,7 @@ export default function AdminDashboard() {
             </svg>
           </div>
           <h2 className="text-2xl font-bold text-yellow-600 mb-4">
-            Sai mạng blockchain
+            Wrong Blockchain Network
           </h2>
         </div>
       </div>
@@ -320,7 +320,7 @@ export default function AdminDashboard() {
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 mx-auto mb-4 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
-          <p className="text-gray-500">Đang kiểm tra quyền truy cập...</p>
+          <p className="text-gray-500">Checking access permissions...</p>
         </div>
       </div>
     );
@@ -336,10 +336,10 @@ export default function AdminDashboard() {
             </svg>
           </div>
           <h2 className="text-2xl font-bold text-red-600 mb-4">
-            Không có quyền truy cập
+            Access Denied
           </h2>
           <p className="text-gray-500">
-            Chỉ admin mới có thể truy cập trang này
+            Only admin can access this page
           </p>
         </div>
       </div>
@@ -350,9 +350,9 @@ export default function AdminDashboard() {
     <div className="max-w-5xl mx-auto animate-slide-up">
       <div className="mb-8">
         <h1 className="text-3xl font-bold gradient-text mb-2">
-          Trang Quản Trị
+          Admin Dashboard
         </h1>
-        <p className="text-gray-500">Quản lý sinh viên, học phí và hoàn tiền</p>
+        <p className="text-gray-500">Manage students, tuition fees and refunds</p>
       </div>
 
       {/* Pending Registration Requests */}
@@ -363,7 +363,7 @@ export default function AdminDashboard() {
               <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              Yêu cầu đăng ký chờ duyệt ({pendingRequests.length})
+              Pending Registration Requests ({pendingRequests.length})
             </h2>
           </div>
           <div className="card-body">
@@ -383,14 +383,14 @@ export default function AdminDashboard() {
                       disabled={isProcessing}
                       className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50 transition-colors"
                     >
-                      Duyệt
+                      Approve
                     </button>
                     <button
                       onClick={() => handleRejectRequest(req.wallet)}
                       disabled={isProcessing}
                       className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50 transition-colors"
                     >
-                      Từ chối
+                      Reject
                     </button>
                   </div>
                 </div>
@@ -404,28 +404,28 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <div className="stat-card bg-gradient-to-br from-blue-500 to-blue-600 text-white">
           <div className="relative z-10">
-            <p className="text-sm text-blue-100 mb-1">Tổng sinh viên</p>
+            <p className="text-sm text-blue-100 mb-1">Total Students</p>
             <p className="text-3xl font-bold">{stats.students}</p>
           </div>
           <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
         </div>
         <div className="stat-card bg-gradient-to-br from-emerald-500 to-green-600 text-white">
           <div className="relative z-10">
-            <p className="text-sm text-emerald-100 mb-1">Tổng thu</p>
+            <p className="text-sm text-emerald-100 mb-1">Total Collected</p>
             <p className="text-3xl font-bold">{stats.collected} <span className="text-sm">ETH</span></p>
           </div>
           <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
         </div>
         <div className="stat-card bg-gradient-to-br from-amber-500 to-orange-600 text-white">
           <div className="relative z-10">
-            <p className="text-sm text-amber-100 mb-1">Số dư Contract</p>
+            <p className="text-sm text-amber-100 mb-1">Contract Balance</p>
             <p className="text-3xl font-bold">{stats.balance} <span className="text-sm">ETH</span></p>
           </div>
           <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
         </div>
         <div className="stat-card bg-gradient-to-br from-red-500 to-rose-600 text-white">
           <div className="relative z-10">
-            <p className="text-sm text-red-100 mb-1">Đã hoàn tiền</p>
+            <p className="text-sm text-red-100 mb-1">Total Refunded</p>
             <p className="text-3xl font-bold">{stats.refunded} <span className="text-sm">ETH</span></p>
           </div>
           <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
@@ -436,7 +436,7 @@ export default function AdminDashboard() {
       {semesters.length > 0 && (
         <div className="card mb-8">
           <div className="card-header">
-            <h2 className="text-lg font-bold text-gray-800">Các học kỳ đã thiết lập</h2>
+            <h2 className="text-lg font-bold text-gray-800">Configured Semesters</h2>
           </div>
           <div className="card-body">
             <div className="flex flex-wrap gap-2">
@@ -453,14 +453,14 @@ export default function AdminDashboard() {
         <div className="card">
           <div className="card-header">
             <h2 className="text-lg font-bold text-gray-800">
-              Đăng ký sinh viên
+              Register Student
             </h2>
           </div>
           <div className="card-body">
             <form onSubmit={handleRegisterStudent} className="space-y-4">
               <input
                 type="text"
-                placeholder="Địa chỉ ví (0x...)"
+                placeholder="Wallet address (0x...)"
                 value={newStudent.wallet}
                 onChange={(e) => setNewStudent({ ...newStudent, wallet: e.target.value })}
                 className="input-field"
@@ -468,7 +468,7 @@ export default function AdminDashboard() {
               />
               <input
                 type="text"
-                placeholder="Mã sinh viên (VD: SV001)"
+                placeholder="Student ID (e.g., SV001)"
                 value={newStudent.studentId}
                 onChange={(e) => setNewStudent({ ...newStudent, studentId: e.target.value })}
                 className="input-field"
@@ -479,7 +479,7 @@ export default function AdminDashboard() {
                 disabled={isProcessing}
                 className="w-full btn-primary"
               >
-                Đăng ký
+                Register
               </button>
             </form>
           </div>
@@ -489,19 +489,19 @@ export default function AdminDashboard() {
         <div className="card">
           <div className="card-header">
             <h2 className="text-lg font-bold text-gray-800">
-              Áp dụng học bổng
+              Apply Scholarship
             </h2>
           </div>
           <div className="card-body">
             <div className="p-3 mb-4 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm text-blue-700">
-                Nếu sinh viên đã thanh toán, hệ thống sẽ <strong>tự động hoàn tiền</strong> phần chênh lệch.
+                If the student has already paid, the system will <strong>auto-refund</strong> the difference.
               </p>
             </div>
             <form onSubmit={handleApplyScholarship} className="space-y-4">
               <input
                 type="text"
-                placeholder="Địa chỉ ví sinh viên"
+                placeholder="Student wallet address"
                 value={newScholarship.wallet}
                 onChange={(e) => setNewScholarship({ ...newScholarship, wallet: e.target.value })}
                 className="input-field"
@@ -509,7 +509,7 @@ export default function AdminDashboard() {
               />
               <input
                 type="number"
-                placeholder="Phần trăm học bổng (0-100)"
+                placeholder="Scholarship percentage (0-100)"
                 min="0"
                 max="100"
                 value={newScholarship.percent}
@@ -522,7 +522,7 @@ export default function AdminDashboard() {
                 disabled={isProcessing}
                 className="w-full btn-success"
               >
-                Áp dụng
+                Apply
               </button>
             </form>
           </div>
@@ -532,14 +532,14 @@ export default function AdminDashboard() {
         <div className="card">
           <div className="card-header">
             <h2 className="text-lg font-bold text-gray-800">
-              Thiết lập học phí
+              Set Tuition Fee
             </h2>
           </div>
           <div className="card-body">
             <form onSubmit={handleSetFee} className="space-y-4">
               <input
                 type="text"
-                placeholder="Học kỳ (VD: 2024-1)"
+                placeholder="Semester (e.g., 2024-1)"
                 value={newFee.semester}
                 onChange={(e) => setNewFee({ ...newFee, semester: e.target.value })}
                 className="input-field"
@@ -547,7 +547,7 @@ export default function AdminDashboard() {
               />
               <input
                 type="text"
-                placeholder="Số tiền (ETH)"
+                placeholder="Amount (ETH)"
                 value={newFee.amount}
                 onChange={(e) => setNewFee({ ...newFee, amount: e.target.value })}
                 className="input-field"
@@ -565,7 +565,7 @@ export default function AdminDashboard() {
                 disabled={isProcessing}
                 className="w-full px-6 py-3 bg-gradient-to-r from-purple-500 to-violet-600 text-white rounded-xl font-semibold shadow-lg shadow-purple-500/30 hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-50"
               >
-                Thiết lập
+                Set Up
               </button>
             </form>
           </div>
@@ -575,7 +575,7 @@ export default function AdminDashboard() {
         <div className="card">
           <div className="card-header">
             <h2 className="text-lg font-bold text-gray-800">
-              Hoàn tiền
+              Process Refund
             </h2>
           </div>
           <div className="card-body">
@@ -594,7 +594,7 @@ export default function AdminDashboard() {
                 disabled={isProcessing}
                 className="w-full btn-danger"
               >
-                Hoàn tiền
+                Refund
               </button>
             </form>
           </div>
@@ -604,19 +604,19 @@ export default function AdminDashboard() {
         <div className="card">
           <div className="card-header">
             <h2 className="text-lg font-bold text-gray-800">
-              Rút tiền về ví trường
+              Withdraw to University Wallet
             </h2>
           </div>
           <div className="card-body">
             <div className="p-3 mb-4 bg-emerald-50 border border-emerald-200 rounded-lg">
               <p className="text-sm text-emerald-700">
-                Số dư khả dụng: <strong>{stats.balance} ETH</strong>
+                Available balance: <strong>{stats.balance} ETH</strong>
               </p>
             </div>
             <form onSubmit={handleWithdraw} className="space-y-4">
               <input
                 type="text"
-                placeholder="Số tiền (ETH) - để trống = rút tất cả"
+                placeholder="Amount (ETH) - leave empty to withdraw all"
                 value={withdrawAmount}
                 onChange={(e) => setWithdrawAmount(e.target.value)}
                 className="input-field"
@@ -626,7 +626,7 @@ export default function AdminDashboard() {
                 disabled={isProcessing || parseFloat(stats.balance) === 0}
                 className="w-full px-6 py-3 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl font-semibold shadow-lg shadow-emerald-500/30 hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-50"
               >
-                Rút tiền
+                Withdraw
               </button>
             </form>
           </div>

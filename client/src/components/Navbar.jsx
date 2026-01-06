@@ -17,7 +17,7 @@ export default function Navbar() {
         <div className="flex justify-between items-center py-4">
           <div className="flex items-center space-x-10">
             <Link to="/" className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              Cổng Học Phí
+              Tuition Portal
             </Link>
             <div className="hidden md:flex space-x-2">
               <Link 
@@ -28,7 +28,7 @@ export default function Navbar() {
                     : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                 }`}
               >
-                Trang chủ
+                Home
               </Link>
               <Link 
                 to="/history" 
@@ -38,7 +38,7 @@ export default function Navbar() {
                     : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                 }`}
               >
-                Lịch sử giao dịch
+                Transaction History
               </Link>
             </div>
           </div>
@@ -49,7 +49,7 @@ export default function Navbar() {
                 onClick={switchNetwork}
                 className="px-4 py-2 bg-gradient-to-r from-amber-400 to-orange-500 text-white rounded-xl font-medium shadow-lg shadow-amber-500/30 hover:shadow-xl transition-all duration-200"
               >
-                Đổi mạng
+                Switch Network
               </button>
             )}
             
@@ -65,7 +65,7 @@ export default function Navbar() {
                   onClick={disconnect}
                   className="px-4 py-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200"
                 >
-                  Ngắt kết nối
+                  Disconnect
                 </button>
               </div>
             ) : (
@@ -74,7 +74,7 @@ export default function Navbar() {
                 disabled={isConnecting}
                 className="btn-primary"
               >
-                {isConnecting ? 'Đang kết nối...' : 'Kết nối MetaMask'}
+                {isConnecting ? 'Connecting...' : 'Connect MetaMask'}
               </button>
             )}
           </div>

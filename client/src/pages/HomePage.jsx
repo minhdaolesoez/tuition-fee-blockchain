@@ -70,15 +70,15 @@ export default function HomePage() {
       });
 
       if (response.ok) {
-        toast.success('Yêu cầu đăng ký đã được gửi! Vui lòng chờ admin phê duyệt.');
+        toast.success('Registration request sent! Please wait for admin approval.');
         setStudentIdInput('');
       } else {
         const data = await response.json();
-        toast.error(data.error || 'Gửi yêu cầu thất bại!');
+        toast.error(data.error || 'Request submission failed!');
       }
     } catch (err) {
       // If API not available, show message
-      toast.error('Vui lòng liên hệ admin để được đăng ký vào hệ thống.');
+      toast.error('Please contact admin to register in the system.');
     } finally {
       setIsRegistering(false);
     }
@@ -94,13 +94,13 @@ export default function HomePage() {
             </svg>
           </div>
           <h1 className="text-4xl font-bold gradient-text mb-4">
-            Cổng Thanh Toán Học Phí
+            Tuition Payment Portal
           </h1>
           <p className="text-gray-500 text-lg mb-8">
-            Hệ thống thanh toán học phí trên nền tảng Blockchain
+            Blockchain-based tuition payment system
           </p>
           <p className="text-gray-400">
-            Vui lòng kết nối ví MetaMask để tiếp tục
+            Please connect MetaMask wallet to continue
           </p>
         </div>
       </div>
@@ -117,10 +117,10 @@ export default function HomePage() {
             </svg>
           </div>
           <h2 className="text-2xl font-bold text-yellow-600 mb-4">
-            Sai mạng blockchain
+            Wrong Blockchain Network
           </h2>
           <p className="text-gray-500">
-            Vui lòng chuyển sang mạng Hardhat Localhost
+            Please switch to Hardhat Localhost network
           </p>
         </div>
       </div>
@@ -132,7 +132,7 @@ export default function HomePage() {
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 mx-auto mb-4 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
-          <p className="text-gray-500">Đang kiểm tra tài khoản...</p>
+          <p className="text-gray-500">Checking account...</p>
         </div>
       </div>
     );
@@ -151,16 +151,16 @@ export default function HomePage() {
                 </svg>
               </div>
               <h2 className="text-2xl font-bold text-gray-800">
-                Tài khoản chưa đăng ký
+                Account Not Registered
               </h2>
               <p className="text-gray-500 mt-2">
-                Ví của bạn chưa được liên kết với hệ thống
+                Your wallet is not linked to the system
               </p>
             </div>
             <div className="card-body">
               <div className="p-4 mb-6 bg-blue-50 border border-blue-200 rounded-xl">
                 <p className="text-sm text-blue-700">
-                  <strong>Địa chỉ ví:</strong><br/>
+                  <strong>Wallet Address:</strong><br/>
                   <code className="text-xs">{account}</code>
                 </p>
               </div>
@@ -168,11 +168,11 @@ export default function HomePage() {
               <form onSubmit={handleSelfRegister} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Mã số sinh viên
+                    Student ID
                   </label>
                   <input
                     type="text"
-                    placeholder="VD: SV001"
+                    placeholder="e.g., SV001"
                     value={studentIdInput}
                     onChange={(e) => setStudentIdInput(e.target.value)}
                     className="input-field"
@@ -184,14 +184,14 @@ export default function HomePage() {
                   disabled={isRegistering}
                   className="w-full btn-primary"
                 >
-                  {isRegistering ? 'Đang gửi...' : 'Gửi yêu cầu đăng ký'}
+                  {isRegistering ? 'Sending...' : 'Submit Registration Request'}
                 </button>
               </form>
 
               <div className="mt-6 pt-6 border-t border-gray-100">
                 <p className="text-sm text-gray-500 text-center">
-                  Sau khi gửi yêu cầu, vui lòng chờ admin phê duyệt.<br/>
-                  Liên hệ phòng đào tạo nếu cần hỗ trợ.
+                  After submitting, please wait for admin approval.<br/>
+                  Contact the registrar office if you need assistance.
                 </p>
               </div>
             </div>

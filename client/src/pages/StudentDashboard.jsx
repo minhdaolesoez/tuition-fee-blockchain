@@ -102,7 +102,7 @@ export default function StudentDashboard() {
     setIsPaying(true);
     try {
       const tx = await contract.payTuition(selectedSemester, { value: feeAmount });
-      toast.loading('Đang xử lý giao dịch...', { id: 'payment' });
+      toast.loading('Processing transaction...', { id: 'payment' });
       
       const receipt = await tx.wait();
       
@@ -122,11 +122,11 @@ export default function StudentDashboard() {
         console.warn('Could not save payment to server:', apiErr);
       }
       
-      toast.success('Thanh toán thành công!', { id: 'payment' });
+      toast.success('Payment successful!', { id: 'payment' });
       setHasPaid(true);
     } catch (err) {
       console.error('Payment error:', err);
-      toast.error(err.reason || 'Thanh toán thất bại!', { id: 'payment' });
+      toast.error(err.reason || 'Payment failed!', { id: 'payment' });
     } finally {
       setIsPaying(false);
     }
@@ -142,10 +142,10 @@ export default function StudentDashboard() {
             </svg>
           </div>
           <h2 className="text-2xl font-bold text-gray-800 mb-3">
-            Kết nối ví Metamask
+            Connect MetaMask Wallet
           </h2>
           <p className="text-gray-500 max-w-sm mx-auto">
-            Vui lòng kết nối ví để xem thông tin học phí và thanh toán
+            Please connect your wallet to view tuition information and make payments
           </p>
         </div>
       </div>
@@ -162,10 +162,10 @@ export default function StudentDashboard() {
             </svg>
           </div>
           <h2 className="text-2xl font-bold text-amber-600 mb-3">
-            Sai mạng blockchain
+            Wrong Blockchain Network
           </h2>
           <p className="text-gray-500">
-            Vui lòng chuyển sang mạng Hardhat Localhost (Chain ID: 31337)
+            Please switch to Hardhat Localhost network (Chain ID: 31337)
           </p>
         </div>
       </div>
@@ -177,7 +177,7 @@ export default function StudentDashboard() {
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 mx-auto mb-4 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
-          <p className="text-gray-500 font-medium">Đang tải...</p>
+          <p className="text-gray-500 font-medium">Loading...</p>
         </div>
       </div>
     );
@@ -192,30 +192,30 @@ export default function StudentDashboard() {
     <div className="max-w-2xl mx-auto animate-slide-up">
       <div className="mb-8">
         <h1 className="text-3xl font-bold gradient-text mb-2">
-          Dashboard Sinh Viên
+          Student Dashboard
         </h1>
-        <p className="text-gray-500">Quản lý và thanh toán học phí trực tuyến</p>
+        <p className="text-gray-500">Manage and pay tuition fees online</p>
       </div>
 
       {/* Student Info Card */}
       <div className="card mb-6">
         <div className="card-header">
           <h2 className="text-lg font-bold text-gray-800">
-            Thông tin sinh viên
+            Student Information
           </h2>
         </div>
         <div className="card-body">
           <div className="grid grid-cols-2 gap-6">
             <div className="p-4 bg-gray-50 rounded-xl">
-              <p className="text-sm text-gray-500 mb-1">Mã sinh viên</p>
+              <p className="text-sm text-gray-500 mb-1">Student ID</p>
               <p className="text-xl font-bold text-gray-800">{studentInfo.studentId}</p>
             </div>
             <div className="p-4 bg-gradient-to-br from-emerald-50 to-green-50 rounded-xl border border-emerald-100">
-              <p className="text-sm text-emerald-600 mb-1">Học bổng</p>
+              <p className="text-sm text-emerald-600 mb-1">Scholarship</p>
               <p className="text-xl font-bold text-emerald-700">
                 {studentInfo.scholarshipPercent > 0 
                   ? `${studentInfo.scholarshipPercent}%` 
-                  : 'Không có'}
+                  : 'None'}
               </p>
             </div>
           </div>
@@ -226,14 +226,14 @@ export default function StudentDashboard() {
       <div className="card">
         <div className="card-header">
           <h2 className="text-lg font-bold text-gray-800">
-            Thanh toán học phí
+            Pay Tuition
           </h2>
         </div>
         <div className="card-body">
           <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Học kỳ</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Semester</label>
             {semesters.length === 0 ? (
-              <p className="text-gray-500 text-sm italic">Chưa có học kỳ nào được thiết lập</p>
+              <p className="text-gray-500 text-sm italic">No semesters have been set up yet</p>
             ) : (
               <select
                 value={selectedSemester}
@@ -248,7 +248,7 @@ export default function StudentDashboard() {
           </div>
 
           <div className="mb-6 p-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border border-blue-100">
-            <p className="text-sm text-blue-600 mb-2">Số tiền cần thanh toán</p>
+            <p className="text-sm text-blue-600 mb-2">Amount to Pay</p>
             <p className="text-4xl font-bold text-blue-700">
               {feeAmount ? `${ethers.formatEther(feeAmount)} ETH` : '--'}
             </p>
@@ -257,7 +257,7 @@ export default function StudentDashboard() {
                 <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                 </svg>
-                Đã trừ {studentInfo.scholarshipPercent}% học bổng
+                {studentInfo.scholarshipPercent}% scholarship applied
               </p>
             )}
           </div>
@@ -270,7 +270,7 @@ export default function StudentDashboard() {
                 </svg>
               </div>
               <span className="text-emerald-700 font-bold text-lg">
-                Đã thanh toán học kỳ này
+                This semester has been paid
               </span>
             </div>
           ) : (
@@ -285,10 +285,10 @@ export default function StudentDashboard() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  Đang xử lý...
+                  Processing...
                 </span>
               ) : (
-                'Thanh toán ngay'
+                'Pay Now'
               )}
             </button>
           )}
