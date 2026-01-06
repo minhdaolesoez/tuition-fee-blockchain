@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Blockchain-based tuition fee payment system with automated reconciliation",
   "scripts": {
+    "setup": "npm install && npm run compile && npm run deploy:local",
     "start": "node scripts/start.js",
     "compile": "npx hardhat compile",
     "test": "npx hardhat test",
