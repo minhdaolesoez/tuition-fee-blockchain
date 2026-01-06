@@ -12,6 +12,7 @@ export function Web3Provider({ children }) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState(null);
   const [chainId, setChainId] = useState(null);
+  const [isOwner, setIsOwner] = useState(false);
 
   const isCorrectNetwork = chainId === SUPPORTED_CHAIN_ID;
 
@@ -70,6 +71,15 @@ export function Web3Provider({ children }) {
       setAccount(accounts[0]);
       setSigner(web3Signer);
       setContract(tuitionContract);
+
+      // Check if current account is owner
+      try {
+        const owner = await tuitionContract.owner();
+        setIsOwner(owner.toLowerCase() === accounts[0].toLowerCase());
+      } catch (err) {
+        console.error('Error checking owner:', err);
+        setIsOwner(false);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -116,6 +126,7 @@ export function Web3Provider({ children }) {
     error,
     chainId,
     isCorrectNetwork,
+    isOwner,
     connect,
     disconnect,
     switchNetwork,

@@ -20,6 +20,17 @@ async function main() {
   console.log("\n[OK] TuitionFeeContract deployed!");
   console.log("Contract address:", contractAddress);
   console.log("University wallet:", universityWallet);
+
+  // Fund contract with initial ETH for refunds (only on localhost)
+  const network = await ethers.provider.getNetwork();
+  if (network.chainId === 31337n) { // Hardhat localhost
+    const fundAmount = ethers.parseEther("100"); // 100 ETH initial balance
+    await deployer.sendTransaction({
+      to: contractAddress,
+      value: fundAmount
+    });
+    console.log(`\n[OK] Funded contract with ${ethers.formatEther(fundAmount)} ETH for refunds`);
+  }
   
   console.log("\nNext steps:");
   console.log("1. Update TUITION_CONTRACT_ADDRESS in .env");

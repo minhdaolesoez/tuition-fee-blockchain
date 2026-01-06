@@ -191,7 +191,7 @@ export default function StudentDashboard() {
   return (
     <div className="max-w-2xl mx-auto animate-slide-up">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold gradient-text mb-2">
+        <h1 className="text-3xl font-bold text-gray-800 mb-2">
           Student Dashboard
         </h1>
         <p className="text-gray-500">Manage and pay tuition fees online</p>

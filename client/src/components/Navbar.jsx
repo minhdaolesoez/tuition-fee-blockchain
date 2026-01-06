@@ -2,7 +2,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useWeb3 } from '../contexts/Web3Context';
 
 export default function Navbar() {
-  const { account, connect, disconnect, isConnecting, isCorrectNetwork, switchNetwork } = useWeb3();
+  const { account, connect, disconnect, isConnecting, isCorrectNetwork, switchNetwork, isOwner } = useWeb3();
   const location = useLocation();
 
   const formatAddress = (addr) => {
@@ -10,6 +10,7 @@ export default function Navbar() {
   };
 
   const isActive = (path) => location.pathname === path;
+  const isHomePage = ['/', '/student', '/admin'].includes(location.pathname);
 
   return (
     <nav className="bg-white/80 backdrop-blur-lg shadow-lg shadow-gray-200/50 sticky top-0 z-50 border-b border-gray-100">
@@ -23,13 +24,25 @@ export default function Navbar() {
               <Link 
                 to="/" 
                 className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
-                  isActive('/') 
+                  isHomePage 
                     ? 'bg-blue-100 text-blue-700' 
                     : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                 }`}
               >
                 Home
               </Link>
+              {isOwner && (
+                <Link 
+                  to="/admin/students" 
+                  className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                    isActive('/admin/students') 
+                      ? 'bg-blue-100 text-blue-700' 
+                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                  }`}
+                >
+                  Student List
+                </Link>
+              )}
               <Link 
                 to="/history" 
                 className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${

@@ -33,10 +33,8 @@ export default function AdminDashboard() {
   });
   
   // Form states
-  const [newStudent, setNewStudent] = useState({ wallet: '', studentId: '' });
-  const [newScholarship, setNewScholarship] = useState({ wallet: '', percent: '' });
+  const [newScholarship, setNewScholarship] = useState({ studentId: '', percent: '' });
   const [newFee, setNewFee] = useState({ semester: '', amount: '', deadline: '' });
-  const [refundId, setRefundId] = useState('');
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [semesters, setSemesters] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
@@ -148,30 +146,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // Register student
-  const handleRegisterStudent = async (e) => {
-    e.preventDefault();
-    if (!contract) return;
-    
-    setIsProcessing(true);
-    try {
-      const tx = await contract.registerStudent(newStudent.wallet, newStudent.studentId);
-      toast.loading('Registering student...', { id: 'register' });
-      await tx.wait();
-      
-      // Save to JSON file
-      await saveToServer('/students', { wallet: newStudent.wallet, studentId: newStudent.studentId });
-      
-      toast.success('Student registered successfully!', { id: 'register' });
-      setNewStudent({ wallet: '', studentId: '' });
-      setStats(prev => ({ ...prev, students: prev.students + 1 }));
-    } catch (err) {
-      toast.error(err.reason || 'Registration failed!', { id: 'register' });
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
   // Apply scholarship (auto refunds if already paid)
   const handleApplyScholarship = async (e) => {
     e.preventDefault();
@@ -179,12 +153,20 @@ export default function AdminDashboard() {
     
     setIsProcessing(true);
     try {
-      const tx = await contract.applyScholarship(newScholarship.wallet, newScholarship.percent);
+      // Lookup wallet address from student ID
+      const walletAddress = await contract.studentIdToAddress(newScholarship.studentId);
+      if (walletAddress === '0x0000000000000000000000000000000000000000') {
+        toast.error('Student ID not found!', { id: 'scholarship' });
+        setIsProcessing(false);
+        return;
+      }
+
+      const tx = await contract.applyScholarship(walletAddress, newScholarship.percent);
       toast.loading('Applying scholarship...', { id: 'scholarship' });
       const receipt = await tx.wait();
       
       // Save to JSON file
-      await saveToServer('/scholarships', { wallet: newScholarship.wallet, percent: Number(newScholarship.percent) });
+      await saveToServer('/scholarships', { studentId: newScholarship.studentId, wallet: walletAddress, percent: Number(newScholarship.percent) });
       
       // Check if there was a scholarship refund
       const scholarshipRefundEvent = receipt.logs.find(log => {
@@ -200,7 +182,7 @@ export default function AdminDashboard() {
         toast.success('Scholarship applied successfully!', { id: 'scholarship' });
       }
       
-      setNewScholarship({ wallet: '', percent: '' });
+      setNewScholarship({ studentId: '', percent: '' });
       await refreshStats();
     } catch (err) {
       toast.error(err.reason || 'Failed!', { id: 'scholarship' });
@@ -235,26 +217,6 @@ export default function AdminDashboard() {
       await refreshStats();
     } catch (err) {
       toast.error(err.reason || 'Failed!', { id: 'fee' });
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  // Process refund
-  const handleRefund = async (e) => {
-    e.preventDefault();
-    if (!contract) return;
-    
-    setIsProcessing(true);
-    try {
-      const tx = await contract.processRefund(refundId);
-      toast.loading('Processing refund...', { id: 'refund' });
-      await tx.wait();
-      toast.success('Refund successful!', { id: 'refund' });
-      setRefundId('');
-      await refreshStats();
-    } catch (err) {
-      toast.error(err.reason || 'Refund failed!', { id: 'refund' });
     } finally {
       setIsProcessing(false);
     }
@@ -349,10 +311,10 @@ export default function AdminDashboard() {
   return (
     <div className="max-w-5xl mx-auto animate-slide-up">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold gradient-text mb-2">
+        <h1 className="text-3xl font-bold text-gray-800 mb-2">
           Admin Dashboard
         </h1>
-        <p className="text-gray-500">Manage students, tuition fees and refunds</p>
+        <p className="text-gray-500">Manage tuition fees and withdrawals</p>
       </div>
 
       {/* Pending Registration Requests */}
@@ -449,42 +411,6 @@ export default function AdminDashboard() {
       )}
 
       <div className="grid md:grid-cols-2 gap-6">
-        {/* Register Student */}
-        <div className="card">
-          <div className="card-header">
-            <h2 className="text-lg font-bold text-gray-800">
-              Register Student
-            </h2>
-          </div>
-          <div className="card-body">
-            <form onSubmit={handleRegisterStudent} className="space-y-4">
-              <input
-                type="text"
-                placeholder="Wallet address (0x...)"
-                value={newStudent.wallet}
-                onChange={(e) => setNewStudent({ ...newStudent, wallet: e.target.value })}
-                className="input-field"
-                required
-              />
-              <input
-                type="text"
-                placeholder="Student ID (e.g., SV001)"
-                value={newStudent.studentId}
-                onChange={(e) => setNewStudent({ ...newStudent, studentId: e.target.value })}
-                className="input-field"
-                required
-              />
-              <button
-                type="submit"
-                disabled={isProcessing}
-                className="w-full btn-primary"
-              >
-                Register
-              </button>
-            </form>
-          </div>
-        </div>
-
         {/* Apply Scholarship */}
         <div className="card">
           <div className="card-header">
@@ -501,9 +427,9 @@ export default function AdminDashboard() {
             <form onSubmit={handleApplyScholarship} className="space-y-4">
               <input
                 type="text"
-                placeholder="Student wallet address"
-                value={newScholarship.wallet}
-                onChange={(e) => setNewScholarship({ ...newScholarship, wallet: e.target.value })}
+                placeholder="Student ID (e.g., SV001)"
+                value={newScholarship.studentId}
+                onChange={(e) => setNewScholarship({ ...newScholarship, studentId: e.target.value })}
                 className="input-field"
                 required
               />
@@ -539,7 +465,7 @@ export default function AdminDashboard() {
             <form onSubmit={handleSetFee} className="space-y-4">
               <input
                 type="text"
-                placeholder="Semester (e.g., 2024-1)"
+                placeholder="Semester (e.g., 2026-1)"
                 value={newFee.semester}
                 onChange={(e) => setNewFee({ ...newFee, semester: e.target.value })}
                 className="input-field"
@@ -566,35 +492,6 @@ export default function AdminDashboard() {
                 className="w-full px-6 py-3 bg-gradient-to-r from-purple-500 to-violet-600 text-white rounded-xl font-semibold shadow-lg shadow-purple-500/30 hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-50"
               >
                 Set Up
-              </button>
-            </form>
-          </div>
-        </div>
-
-        {/* Process Refund */}
-        <div className="card">
-          <div className="card-header">
-            <h2 className="text-lg font-bold text-gray-800">
-              Process Refund
-            </h2>
-          </div>
-          <div className="card-body">
-            <form onSubmit={handleRefund} className="space-y-4">
-              <input
-                type="number"
-                placeholder="Payment ID"
-                min="1"
-                value={refundId}
-                onChange={(e) => setRefundId(e.target.value)}
-                className="input-field"
-                required
-              />
-              <button
-                type="submit"
-                disabled={isProcessing}
-                className="w-full btn-danger"
-              >
-                Refund
               </button>
             </form>
           </div>

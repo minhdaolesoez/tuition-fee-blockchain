@@ -111,6 +111,13 @@ contract TuitionFeeContract is Ownable, ReentrancyGuard {
         require(_universityWallet != address(0), "Invalid university wallet");
         universityWallet = _universityWallet;
     }
+
+    // ============ Receive ETH ============
+    
+    /**
+     * @dev Allow contract to receive ETH directly (for initial funding)
+     */
+    receive() external payable {}
     
     // ============ Admin Functions ============
     
@@ -501,5 +508,22 @@ contract TuitionFeeContract is Ownable, ReentrancyGuard {
      */
     function getFeeSchedule(string memory _semester) external view returns (FeeSchedule memory) {
         return feeSchedules[_semester];
+    }
+
+    /**
+     * @dev Get all registered student addresses
+     * @return Array of student wallet addresses
+     */
+    function getAllStudents() external view returns (address[] memory) {
+        return registeredStudents;
+    }
+
+    /**
+     * @dev Get all payment IDs for a student
+     * @param _student Student address
+     * @return Array of payment IDs
+     */
+    function getStudentPaymentIds(address _student) external view returns (uint256[] memory) {
+        return studentPaymentIds[_student];
     }
 }

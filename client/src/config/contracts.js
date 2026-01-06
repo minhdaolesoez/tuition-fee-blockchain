@@ -12,6 +12,7 @@ export const CONTRACT_ABI = [
   "function universityWallet() view returns (address)",
   "function paymentCounter() view returns (uint256)",
   "function students(address) view returns (string studentId, address walletAddress, uint256 scholarshipPercent, bool isRegistered)",
+  "function studentIdToAddress(string) view returns (address)",
   "function feeSchedules(string) view returns (string semester, uint256 baseAmount, uint256 deadline, bool isActive)",
   "function calculateFee(address _student, string _semester) view returns (uint256)",
   "function hasStudentPaid(address _student, string _semester) view returns (bool)",
@@ -23,6 +24,8 @@ export const CONTRACT_ABI = [
   "function getFinancialSummary() view returns (uint256 balance, uint256 collected, uint256 refunded)",
   "function getActiveSemesters() view returns (string[])",
   "function getFeeSchedule(string _semester) view returns (tuple(string semester, uint256 baseAmount, uint256 deadline, bool isActive))",
+  "function getAllStudents() view returns (address[])",
+  "function getStudentPaymentIds(address _student) view returns (uint256[])",
   
   // Write functions
   "function registerStudent(address _walletAddress, string _studentId)",
