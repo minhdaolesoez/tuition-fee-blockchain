@@ -3,10 +3,28 @@ import { ethers } from 'ethers';
 import { useWeb3 } from '../contexts/Web3Context';
 
 export default function PaymentHistory() {
-  const { contract, isCorrectNetwork } = useWeb3();
+  const { contract, isCorrectNetwork, isOwner } = useWeb3();
   const [payments, setPayments] = useState([]);
+  const [filteredPayments, setFilteredPayments] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [totalPayments, setTotalPayments] = useState(0);
+  
+  // Filters
+  const [students, setStudents] = useState([]);
+  const [semesters, setSemesters] = useState([]);
+  const [selectedStudent, setSelectedStudent] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('');
+  const [selectedSemester, setSelectedSemester] = useState('');
+  
+  // Time range slider
+  const [timeRange, setTimeRange] = useState({ min: 0, max: 0 });
+  const [selectedTimeRange, setSelectedTimeRange] = useState({ from: 0, to: 0 });
+  const [showFilters, setShowFilters] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const refreshData = () => {
+    setRefreshKey(prev => prev + 1);
+  };
 
   useEffect(() => {
     async function fetchPayments() {
@@ -17,9 +35,98 @@ export default function PaymentHistory() {
         const count = await contract.paymentCounter();
         setTotalPayments(Number(count));
         
+        let allTransactions = [];
+        
         if (count > 0) {
           const history = await contract.getPaymentHistory(1, Math.min(Number(count), 50));
-          setPayments(history);
+          
+          // Convert payments to transaction format
+          const paymentTransactions = history.map((p, idx) => ({
+            type: 'payment',
+            id: idx + 1,
+            student: p.student,
+            studentId: p.studentId,
+            semester: p.semester,
+            amount: p.amount,
+            amountAfterRefund: p.amountAfterRefund,
+            timestamp: p.timestamp,
+            paid: p.paid,
+            refunded: p.refunded
+          }));
+          
+          allTransactions = [...paymentTransactions];
+          
+          // Fetch RefundProcessed events
+          try {
+            const refundFilter = contract.filters.RefundProcessed();
+            const refundEvents = await contract.queryFilter(refundFilter);
+            
+            const refundTransactions = await Promise.all(refundEvents.map(async (event) => {
+              const payment = await contract.getPayment(event.args.paymentId);
+              return {
+                type: 'refund',
+                id: `refund-${Number(event.args.paymentId)}`,
+                student: event.args.student,
+                studentId: payment.studentId,
+                semester: payment.semester,
+                amount: event.args.amount,
+                timestamp: event.args.timestamp,
+                paymentId: Number(event.args.paymentId)
+              };
+            }));
+            
+            allTransactions = [...allTransactions, ...refundTransactions];
+          } catch (err) {
+            console.warn('Could not fetch refund events:', err);
+          }
+          
+          // Fetch ScholarshipRefund events
+          try {
+            const scholarshipRefundFilter = contract.filters.ScholarshipRefund();
+            const scholarshipRefundEvents = await contract.queryFilter(scholarshipRefundFilter);
+            
+            const scholarshipRefundTransactions = await Promise.all(scholarshipRefundEvents.map(async (event) => {
+              const payment = await contract.getPayment(event.args.paymentId);
+              const student = await contract.getStudent(event.args.student);
+              return {
+                type: 'scholarship_refund',
+                id: `scholarship-${Number(event.args.paymentId)}-${Number(event.args.timestamp)}`,
+                student: event.args.student,
+                studentId: student.studentId,
+                semester: payment.semester,
+                amount: event.args.refundAmount,
+                timestamp: event.args.timestamp,
+                paymentId: Number(event.args.paymentId)
+              };
+            }));
+            
+            allTransactions = [...allTransactions, ...scholarshipRefundTransactions];
+          } catch (err) {
+            console.warn('Could not fetch scholarship refund events:', err);
+          }
+          
+          // Sort by timestamp descending
+          allTransactions.sort((a, b) => Number(b.timestamp) - Number(a.timestamp));
+          
+          setPayments(allTransactions);
+          setFilteredPayments(allTransactions);
+          
+          // Extract unique students for filter dropdown
+          const uniqueStudents = [...new Set(allTransactions.map(p => p.studentId))].sort();
+          setStudents(uniqueStudents);
+          
+          // Extract unique semesters for filter dropdown
+          const uniqueSemesters = [...new Set(allTransactions.map(p => p.semester))].sort();
+          setSemesters(uniqueSemesters);
+          
+          // Set time range from payment timestamps
+          if (allTransactions.length > 0) {
+            const timestamps = allTransactions.map(p => Number(p.timestamp));
+            const minTime = Math.min(...timestamps);
+            const maxTime = Math.max(...timestamps);
+            setTimeRange({ min: minTime, max: maxTime });
+            setSelectedTimeRange({ from: minTime, to: maxTime });
+          }
         }
       } catch (err) {
         console.error('Error fetching payments:', err);
@@ -29,7 +136,62 @@ export default function PaymentHistory() {
     }
     
     fetchPayments();
-  }, [contract]);
+  }, [contract, refreshKey]);
+
+  // Apply filters
+  useEffect(() => {
+    let result = [...payments];
+    
+    // Filter by student
+    if (selectedStudent) {
+      result = result.filter(p => p.studentId === selectedStudent);
+    }
+    
+    // Filter by status/type
+    if (selectedStatus === 'paid') {
+      result = result.filter(p => p.type === 'payment' && p.paid && !p.refunded);
+    } else if (selectedStatus === 'refunded') {
+      result = result.filter(p => p.type === 'payment' && p.refunded);
+    } else if (selectedStatus === 'refund_tx') {
+      result = result.filter(p => p.type === 'refund' || p.type === 'scholarship_refund');
+    }
+    
+    // Filter by semester
+    if (selectedSemester) {
+      result = result.filter(p => p.semester === selectedSemester);
+    }
+    
+    // Filter by time range
+    if (timeRange.min > 0) {
+      result = result.filter(p => {
+        const ts = Number(p.timestamp);
+        return ts >= selectedTimeRange.from && ts <= selectedTimeRange.to;
+      });
+    }
+    
+    setFilteredPayments(result);
+  }, [payments, selectedStudent, selectedStatus, selectedSemester, selectedTimeRange, timeRange]);
+
+  const clearFilters = () => {
+    setSelectedStudent('');
+    setSelectedStatus('');
+    setSelectedSemester('');
+    setSelectedTimeRange({ from: timeRange.min, to: timeRange.max });
+  };
+  
+  const formatShortDate = (timestamp) => {
+    const date = new Date(timestamp * 1000);
+    return date.toLocaleString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+  
+  const hasActiveFilters = selectedStudent || selectedStatus || selectedSemester || 
+    (timeRange.min > 0 && (selectedTimeRange.from !== timeRange.min || selectedTimeRange.to !== timeRange.max));
 
   const formatDate = (timestamp) => {
     return new Date(Number(timestamp) * 1000).toLocaleString('vi-VN');
@@ -60,7 +222,7 @@ export default function PaymentHistory() {
   return (
     <div className="max-w-6xl mx-auto animate-slide-up">
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold text-gray-800 mb-2">
             Payment History
@@ -69,27 +231,191 @@ export default function PaymentHistory() {
             Track all transactions on blockchain
           </p>
         </div>
-        <div className="badge badge-primary text-base px-6 py-3">
-          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-          </svg>
-          Total: {totalPayments} transactions
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all ${
+              showFilters || hasActiveFilters
+                ? 'bg-blue-100 text-blue-700'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+            </svg>
+            Filter
+            {hasActiveFilters && (
+              <span className="ml-1 px-2 py-0.5 text-xs bg-blue-600 text-white rounded-full">
+                {[selectedStudent, selectedSemester, selectedStatus, 
+                  (timeRange.min > 0 && (selectedTimeRange.from !== timeRange.min || selectedTimeRange.to !== timeRange.max))]
+                  .filter(Boolean).length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={refreshData}
+            disabled={isLoading}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-50"
+            title="Refresh data"
+          >
+            <svg className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
         </div>
       </div>
+
+      {/* Filters - Collapsible */}
+      {showFilters && (
+        <div className="card p-4 mb-6 animate-slide-up">
+        <div className="grid md:grid-cols-3 gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Student</label>
+            <select
+              value={selectedStudent}
+              onChange={(e) => setSelectedStudent(e.target.value)}
+              className="input-field"
+            >
+              <option value="">All Students</option>
+              {students.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Semester</label>
+            <select
+              value={selectedSemester}
+              onChange={(e) => setSelectedSemester(e.target.value)}
+              className="input-field"
+            >
+              <option value="">All Semesters</option>
+              {semesters.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Type</label>
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="input-field"
+            >
+              <option value="">All Types</option>
+              <option value="paid">Payment (Success)</option>
+              <option value="refunded">Payment (Refunded)</option>
+              <option value="refund_tx">Refund Transfer</option>
+            </select>
+          </div>
+        </div>
+        
+        {/* Time Range Slider */}
+        {timeRange.min > 0 && (
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <label className="block text-sm font-medium text-gray-700 mb-3">Time Range</label>
+            <div className="flex justify-between text-sm text-gray-600 mb-2">
+              <span className="px-3 py-1 bg-gray-100 rounded-lg font-mono">
+                {formatShortDate(selectedTimeRange.from)}
+              </span>
+              <span className="px-3 py-1 bg-gray-100 rounded-lg font-mono">
+                {formatShortDate(selectedTimeRange.to)}
+              </span>
+            </div>
+            <div className="relative h-2 mt-4">
+              {/* Track background */}
+              <div className="absolute w-full h-2 bg-gray-200 rounded-full pointer-events-none"></div>
+              {/* Active track */}
+              <div 
+                className="absolute h-2 bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-full pointer-events-none"
+                style={{
+                  left: `${((selectedTimeRange.from - timeRange.min) / (timeRange.max - timeRange.min)) * 100}%`,
+                  right: `${100 - ((selectedTimeRange.to - timeRange.min) / (timeRange.max - timeRange.min)) * 100}%`
+                }}
+              ></div>
+              {/* From slider */}
+              <input
+                type="range"
+                min={timeRange.min}
+                max={timeRange.max}
+                value={selectedTimeRange.from}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  if (val <= selectedTimeRange.to) {
+                    setSelectedTimeRange(prev => ({ ...prev, from: val }));
+                  }
+                }}
+                className="absolute w-full h-2 appearance-none bg-transparent pointer-events-none z-10
+                  [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 
+                  [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-emerald-500 
+                  [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-pointer
+                  [&::-webkit-slider-thumb]:pointer-events-auto
+                  [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:bg-white 
+                  [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-emerald-500 [&::-moz-range-thumb]:rounded-full
+                  [&::-moz-range-thumb]:pointer-events-auto"
+              />
+              {/* To slider */}
+              <input
+                type="range"
+                min={timeRange.min}
+                max={timeRange.max}
+                value={selectedTimeRange.to}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  if (val >= selectedTimeRange.from) {
+                    setSelectedTimeRange(prev => ({ ...prev, to: val }));
+                  }
+                }}
+                className="absolute w-full h-2 appearance-none bg-transparent pointer-events-none z-20
+                  [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 
+                  [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-emerald-500 
+                  [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-pointer
+                  [&::-webkit-slider-thumb]:pointer-events-auto
+                  [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:bg-white 
+                  [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-emerald-500 [&::-moz-range-thumb]:rounded-full
+                  [&::-moz-range-thumb]:pointer-events-auto"
+              />
+            </div>
+          </div>
+        )}
+        
+        <div className="flex items-center justify-between mt-4">
+          {hasActiveFilters && (
+            <>
+              <div className="text-sm text-gray-500">
+                Showing {filteredPayments.length} of {payments.length} transactions
+              </div>
+              <button
+                onClick={clearFilters}
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl transition-all text-sm"
+              >
+                Clear Filters
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+      )}
 
       {isLoading ? (
         <div className="text-center py-20">
           <div className="spinner mx-auto mb-4"></div>
           <p className="text-gray-500">Loading transaction history...</p>
         </div>
-      ) : payments.length === 0 ? (
+      ) : filteredPayments.length === 0 ? (
         <div className="card">
           <div className="card-body text-center py-16">
             <svg className="w-20 h-20 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
             </svg>
-            <h3 className="text-xl font-semibold text-gray-700 mb-2">No transactions yet</h3>
-            <p className="text-gray-500">Transactions will be displayed here when payments are made</p>
+            <h3 className="text-xl font-semibold text-gray-700 mb-2">
+              {payments.length === 0 ? 'No transactions yet' : 'No matching transactions'}
+            </h3>
+            <p className="text-gray-500">
+              {payments.length === 0 
+                ? 'Transactions will be displayed here when payments are made'
+                : 'Try adjusting your filters'}
+            </p>
           </div>
         </div>
       ) : (
@@ -99,6 +425,7 @@ export default function PaymentHistory() {
               <thead>
                 <tr>
                   <th>#</th>
+                  <th>Type</th>
                   <th>Student</th>
                   <th>Wallet</th>
                   <th>Semester</th>
@@ -108,10 +435,25 @@ export default function PaymentHistory() {
                 </tr>
               </thead>
               <tbody>
-                {payments.map((payment, index) => (
-                  <tr key={index}>
+                {filteredPayments.map((payment, index) => (
+                  <tr key={payment.id || index} className={payment.type !== 'payment' ? 'bg-amber-50/50' : ''}>
                     <td className="font-medium text-gray-900">
                       {index + 1}
+                    </td>
+                    <td>
+                      {payment.type === 'payment' ? (
+                        <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                          Payment
+                        </span>
+                      ) : payment.type === 'refund' ? (
+                        <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">
+                          Refund
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
+                          Scholarship
+                        </span>
+                      )}
                     </td>
                     <td>
                       <span className="font-semibold text-gray-900">{payment.studentId}</span>
@@ -125,13 +467,14 @@ export default function PaymentHistory() {
                       {payment.semester}
                     </td>
                     <td>
-                      <div>
-                        <span className="font-semibold text-gray-900">{ethers.formatEther(payment.amountAfterRefund || payment.amount)}</span>
+                      <div className={payment.type !== 'payment' ? 'text-amber-600' : ''}>
+                        {payment.type !== 'payment' && <span className="mr-1">-</span>}
+                        <span className="font-semibold">{ethers.formatEther(payment.amount)}</span>
                         <span className="text-gray-500 ml-1">ETH</span>
                       </div>
-                      {payment.amount !== payment.amountAfterRefund && payment.amountAfterRefund && (
+                      {payment.type === 'payment' && payment.amountAfterRefund && payment.amount !== payment.amountAfterRefund && (
                         <div className="text-xs text-gray-400">
-                          Original: {ethers.formatEther(payment.amount)} ETH
+                          After refund: {ethers.formatEther(payment.amountAfterRefund)} ETH
                         </div>
                       )}
                     </td>
@@ -139,7 +482,15 @@ export default function PaymentHistory() {
                       {formatDate(payment.timestamp)}
                     </td>
                     <td>
-                      {payment.refunded ? (
+                      {payment.type === 'refund' ? (
+                        <span className="badge badge-warning">
+                          ↩ Transferred
+                        </span>
+                      ) : payment.type === 'scholarship_refund' ? (
+                        <span className="badge badge-warning">
+                          ↩ Auto-refund
+                        </span>
+                      ) : payment.refunded ? (
                         <span className="badge badge-warning">
                           Refunded
                         </span>

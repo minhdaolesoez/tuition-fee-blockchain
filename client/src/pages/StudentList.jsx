@@ -113,7 +113,11 @@ export default function StudentList() {
       toast.loading('Processing refund...', { id: 'refund' });
       await tx.wait();
       toast.success('Refund processed successfully!', { id: 'refund' });
-      loadStudents();
+      
+      // Wait a bit for blockchain state to update, then reload
+      setTimeout(() => {
+        loadStudents();
+      }, 500);
     } catch (error) {
       console.error('Refund error:', error);
       toast.error(error.reason || 'Failed to process refund', { id: 'refund' });
